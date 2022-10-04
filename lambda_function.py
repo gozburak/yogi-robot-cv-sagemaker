@@ -191,7 +191,7 @@ def infinite_infer_run():
             setStatus('personpresent',False)
             continue
         print('person detected)')
-        setStatus('personpresent',True)
+        setStatus('personpresent',"True")
         print(pose_input.shape)
 
         start = time()
@@ -208,7 +208,7 @@ def infinite_infer_run():
         start = time()
         json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
         print('--------------Created JSON: {}s'.format(time() - start))
-        
+
         print('===========================.Entire loop took{}s'.format(time() - loopstart))
 
 infinite_infer_run()
