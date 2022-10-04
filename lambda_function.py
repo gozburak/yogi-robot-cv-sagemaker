@@ -17,8 +17,10 @@ import boto3
 import csv
 
 s3 = boto3.client("s3")
-S3_BUCKET = '<YOUR_S3_BUCKET_NAME>'
+S3_BUCKET = 'deeplens-basic-posturedetector'
 DATA_BUFFER = 60 # Not used but kept for future uses.
+dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
+statustable = dynamodb.Table('statustable')
 
 # The below are the main definitions for our human boday parts
 keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear','Left Ear','Right Shoulder',
@@ -35,12 +37,6 @@ BodyForm = {
     'Hips': ['Left Hip', 'Right Hip'],
     'Shoulders': ['Left Shoulder', 'Right Shoulder'],
     }
-
-# This is the original lambda handler func. - not touched
-def lambda_handler(event, context):
-    """Empty entry point to the Lambda function invoked from the edge."""
-    print("hello world")
-    return
 
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
@@ -120,9 +116,35 @@ def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic)
        in enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts))]
     
     return json.dumps(res)
-    
-    
 
+# This is the original lambda handler func. - not touched
+def lambda_handler(event, context):
+    """Empty entry point to the Lambda function invoked from the edge."""
+    print("hello world")
+    return
+
+def getStatus( key):
+    response = statustable.get_item(
+    Key={
+        'statuskey': key
+        }
+    )
+    statusvalue = response['statusvalue']
+    print(statusvalue)
+    return statusvalue
+
+def setStatus(key, value):
+    statustable.update_item(
+    Key={
+        'statuskey': key,
+    },
+    UpdateExpression='SET statusvalue = :statusvalue',
+    ExpressionAttributeValues={
+        ':statusvalue': value
+    }
+)
+def write_to_s3(localfile, bucket, objectname):
+    s3.upload_file(localfile, bucket, objectname)
 # This is the original function
 def infinite_infer_run():
     """ Run the DeepLens inference loop frame by frame"""
@@ -139,48 +161,54 @@ def infinite_infer_run():
 
     # Load the models here
     people_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True, root=MODEL_PATH)
-    # pose_net = model_zoo.get_model('simple_pose_resnet18_v1b')
-    # pose_net.load_parameters(MODEL_PATH+'simple_pose_resnet18_v1b-0000.params')
     pose_net = model_zoo.get_model('simple_pose_resnet18_v1b', pretrained=True, root=MODEL_PATH)
     people_detector.reset_class(["person"], reuse_weights=['person'])
     sec_mark = 1
     while True:
+        loopstart = time()
         # Get a frame from the video stream
         start = time()
         _, frame = awscam.getLastFrame()
         frame = cv2.resize(frame, (380, 672))
-        print('Load frame: {}s'.format(time() - start))
+        print('---------------Load frame: {}s'.format(time() - start))
         print(frame.shape)
+
         start = time()
         x, img = data.transforms.presets.ssd.transform_test(nd.array(frame), short=256)
-        print('Shape of pre-processed image:', x.shape)
-
-        print('Load image: {}s'.format(time() - start))
+        print('---------------.transform_test{}s'.format(time() - start))
+        print('---------------Shape of pre-processed image:{}s', x.shape)
 
         start = time()
         class_ids, scores, bboxes = people_detector(x)
+        print('---------------Detection: {}s'.format(time() - start))
 
-        print('Detection: {}s'.format(time() - start))
-
+        start = time()
         pose_input, upscale_bbox = detector_to_simple_pose(img, class_ids, scores, bboxes)
+        print('---------------.transform_test{}s'.format(time() - start))
 
         if pose_input is None:
             print("no person detected")
+            setStatus('personpresent',False)
             continue
-
+        print('person detected)')
+        setStatus('personpresent',True)
         print(pose_input.shape)
 
         start = time()
         predicted_heatmap = pose_net(pose_input)
-        
-        
-        pred_coords, confidence = heatmap_to_coord(predicted_heatmap, upscale_bbox)
+        print('---------------heatmap: {}s'.format(time() - start))
 
-        print('Pose Detect: {}s'.format(time() - start))
+        start = time()
+        coords, confidence = heatmap_to_coord(predicted_heatmap, upscale_bbox)
+        print('--------------Coords from heatma: {}s'.format(time() - start))
 
-        # Creating JSON
-        print("creating json")
-        json = create_json(pred_coords, confidence, bboxes, scores, client, iot_topic)
+        # local_display.set_frame_data(out)
+
+         # Creating JSON
+        start = time()
+        json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
+        print('--------------Created JSON: {}s'.format(time() - start))
         
+        print('===========================.Entire loop took{}s'.format(time() - loopstart))
 
 infinite_infer_run()
