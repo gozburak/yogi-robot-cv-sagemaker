@@ -22,6 +22,8 @@ S3_BUCKET = 'deeplens-basic-posturedetector'
 DATA_BUFFER = 60 # Not used but kept for future uses.
 dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
 statustable = dynamodb.Table('statustable')
+snsTopicArn = 'arn:aws:sns:us-east-1:973994155064:deeplenspose' #CHANGE!!
+
 
 # The below are the main definitions for our human boday parts
 keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear', 'Left Ear', 'Right Shoulder',
@@ -300,7 +302,12 @@ def infinite_infer_run():
 
         # Creating JSON
         start = time()
-        json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
+        result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
+        
+        # Now we publish the sns
+        sns = boto3.client('sns')
+        response = sns.publish(TopicArn = snsTopicArn,Message=result_json,MessageStructure='json')
+        
         print('--------------Created JSON: {}s'.format(time() - start))
 
         print('===========================.Entire loop took{}s'.format(time() - loopstart))
