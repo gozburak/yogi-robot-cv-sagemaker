@@ -14,12 +14,13 @@ from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coo
 from math import atan2, degrees
 import datetime
 import boto3
-import csv
+from boto3.dynamodb.conditions import Key
+
 
 s3 = boto3.client("s3")
 S3_BUCKET = 'deeplens-basic-posturedetector'
-DATA_BUFFER = 60  # Not used but kept for future uses.
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+DATA_BUFFER = 60 # Not used but kept for future uses.
+dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
 statustable = dynamodb.Table('statustable')
 
 # The below are the main definitions for our human boday parts
@@ -132,21 +133,33 @@ def lambda_handler(event, context):
     return
 
 
-def getStatus(key):
+# This is the original lambda handler func. - not touched
+def lambda_handler(event, context):
+    """Empty entry point to the Lambda function invoked from the edge."""
+    print("hello world")
+    return
+
+
+def write_to_s3(localfile, bucket, objectname):
+    s3.upload_file(localfile, bucket, objectname)
+
+
+def getStatus():
     response = statustable.get_item(
         Key={
-            'statuskey': key
+            'statuskey': 'personpresent'
         }
     )
-    statusvalue = response['statusvalue']
+    print(response)
+    statusvalue = response['Item']['statusvalue']
     print(statusvalue)
     return statusvalue
 
 
-def setStatus(key, value):
+def setStatus(value):
     statustable.update_item(
         Key={
-            'statuskey': key,
+            'statuskey': 'personpresent'
         },
         UpdateExpression='SET statusvalue = :statusvalue',
         ExpressionAttributeValues={
@@ -155,8 +168,35 @@ def setStatus(key, value):
     )
 
 
-def write_to_s3(localfile, bucket, objectname):
-    s3.upload_file(localfile, bucket, objectname)
+def getPosture():
+    response = statustable.get_item(
+        Key={
+            'statuskey': 'currentposture'
+        }
+    )
+    print(response)
+    statusvalue = response['Item']['statusvalue']
+    print(statusvalue)
+    return statusvalue
+
+
+def setPosture(value):
+    statustable.update_item(
+        Key={
+            'statuskey': 'currentposture',
+        },
+        UpdateExpression='SET statusvalue = :statusvalue',
+        ExpressionAttributeValues={
+            ':statusvalue': value
+        }
+    )
+
+
+#dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+#statustable = dynamodb.Table('statustable')
+
+print('Posture is....' + getPosture())
+print('Person Present is...' + getStatus())
 
 
 # This is the original function
@@ -179,11 +219,16 @@ def infinite_infer_run():
     people_detector.reset_class(["person"], reuse_weights=['person'])
     sec_mark = 1
     while True:
+        print("Person Present is: " + getStatus())
+        print("Current posture is: " + getPosture())
         loopstart = time()
         # Get a frame from the video stream
         start = time()
         _, frame = awscam.getLastFrame()
-        frame = cv2.resize(frame, (380, 672))
+        # frame = cv2.resize(frame, (380, 672))
+        posture = getPosture()
+        # cv2.putText(image, posture, org, font,
+        #           fontScale, color, thickness, cv2.LINE_AA)
         print('---------------Load frame: {}s'.format(time() - start))
         print(frame.shape)
 
@@ -202,10 +247,10 @@ def infinite_infer_run():
 
         if pose_input is None:
             print("no person detected")
-            setStatus('personpresent', False)
+            setStatus('False')
             continue
         print('person detected)')
-        setStatus('personpresent', "True")
+        setStatus('True')
         print(pose_input.shape)
 
         start = time()
@@ -216,7 +261,9 @@ def infinite_infer_run():
         coords, confidence = heatmap_to_coord(predicted_heatmap, upscale_bbox)
         print('--------------Coords from heatma: {}s'.format(time() - start))
 
-        # local_display.set_frame_data(out)
+        ax = utils.viz.cv_plot_keypoints(img, coords, confidence, class_ids, bboxes, scores, box_thresh=0.5,
+                                         keypoint_thresh=0.2)
+        local_display.set_frame_data(ax)
 
         # Creating JSON
         start = time()
