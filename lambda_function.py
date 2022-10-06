@@ -23,7 +23,7 @@ S3_BUCKET = 'deeplens-basic-posturedetector'
 DATA_BUFFER = 60 # Not used but kept for future uses.
 dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
 statustable = dynamodb.Table('statustable')
-snsTopicArn = 'arn:aws:sns:us-east-1:973994155064:deeplenspose' #CHANGE!!
+session = '132wqdqwe123'
 
 
 # The below are the main definitions for our human boday parts
@@ -156,7 +156,7 @@ def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic):
     deviations = calculate_deviations(paramsBodyparts)
 
     # This is the schema for our JSON
-    res = [{"Timestamp":time_now,"PersonID":person,**Bbox, "Joints":Joint, "Bodyparts":Body, "Deviations": Devi} 
+    res = [{"SessionID":session,"Timestamp":time_now,"PersonID":person,**Bbox, "Joints":Joint, "Bodyparts":Body, "Deviations": Devi} 
            for person,(Bbox,Joint,Body, Devi) in enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
 
     return json.dumps(res)
@@ -305,9 +305,10 @@ def infinite_infer_run():
         start = time()
         result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
         
+        
         # Now we publish the sns
-        sns = boto3.client('sns')
-        response = sns.publish(TopicArn = snsTopicArn,Message=result_json,MessageStructure='json')
+        cloud_output = {"out": result_json}
+        client.publish(topic=iot_topic, payload=json.dumps(cloud_output))
         
         print('--------------Created JSON: {}s'.format(time() - start))
 
