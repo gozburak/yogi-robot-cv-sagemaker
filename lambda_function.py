@@ -16,15 +16,14 @@ from math import atan2, degrees
 import datetime
 import boto3
 from boto3.dynamodb.conditions import Key
-
+import uuid
 
 s3 = boto3.client("s3")
 S3_BUCKET = 'deeplens-basic-posturedetector'
-DATA_BUFFER = 60 # Not used but kept for future uses.
-dynamodb = boto3.resource('dynamodb',region_name='us-east-1')
+DATA_BUFFER = 60  # Not used but kept for future uses.
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 statustable = dynamodb.Table('statustable')
 session = '132wqdqwe123'
-
 
 # The below are the main definitions for our human boday parts
 keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear', 'Left Ear', 'Right Shoulder',
@@ -42,15 +41,15 @@ BodyForm = {
     'Shoulders': ['Left Shoulder', 'Right Shoulder'],
 }
 
-# WE NEED TO REPLACE THSI WITH A DATABASE 
+# WE NEED TO REPLACE THSI WITH A DATABASE
 ground_truth_angles = {'Right Lower Arm': {'GT Angle': 0.0},
-  'Left Lower Arm': {'GT Angle': 0.0},
-  'Right Upper Arm': {'GT Angle': -10.0},
-  'Left Upper Arm': {'GT Angle': 10.0},
-  'Right Thigh': {'GT Angle': 60},
-  'Left Thigh': {'GT Angle': -60},
-  'Hips': {'GT Angle': 0.0},
-  'Shoulders': {'GT Angle': 0.0}}
+                       'Left Lower Arm': {'GT Angle': 0.0},
+                       'Right Upper Arm': {'GT Angle': -10.0},
+                       'Left Upper Arm': {'GT Angle': 10.0},
+                       'Right Thigh': {'GT Angle': 60},
+                       'Left Thigh': {'GT Angle': -60},
+                       'Hips': {'GT Angle': 0.0},
+                       'Shoulders': {'GT Angle': 0.0}}
 
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
@@ -100,6 +99,7 @@ def get_bodyparts_params(allBodyparts):
         paramsBodyparts.append(paramsBodyparts_pp)
     return paramsBodyparts
 
+
 # This calculates orientations
 def build_body_from_joints(allJoints):
     allBodyparts = []
@@ -108,9 +108,10 @@ def build_body_from_joints(allJoints):
         for bodypart_name, joint_names in BodyForm.items():
             body = Bodypart(bodypart_name, joint[joint_names[0]], joint[joint_names[1]])
             body.get_metrics()
-            iter_body.update({bodypart_name:body})
+            iter_body.update({bodypart_name: body})
         allBodyparts.append(iter_body)
     return allBodyparts
+
 
 # This calculates deviations from the ground truth
 def calculate_deviations(paramsBodyparts):
@@ -119,9 +120,10 @@ def calculate_deviations(paramsBodyparts):
         deviations_pp = {}
         for bodypart_name, data in paramsBodyparts_pp.items():
             diff = data['Angle'] - ground_truth_angles[bodypart_name]['GT Angle']
-            deviations_pp.update({bodypart_name:{'Diff':diff}})
+            deviations_pp.update({bodypart_name: {'Diff': diff}})
         deviations.append(deviations_pp)
     return deviations
+
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
 # ... 'create_json' replaces the original 'update_state_json' function
@@ -151,13 +153,15 @@ def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic):
 
     # Time stamp is added to the output
     time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+
     # Calculating deviations
     deviations = calculate_deviations(paramsBodyparts)
 
     # This is the schema for our JSON
-    res = [{"SessionID":session,"Timestamp":time_now,"PersonID":person,**Bbox, "Joints":Joint, "Bodyparts":Body, "Deviations": Devi} 
-           for person,(Bbox,Joint,Body, Devi) in enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
+    res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint, "Bodyparts": Body,
+            "Deviations": Devi}
+           for person, (Bbox, Joint, Body, Devi) in
+           enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
 
     return json.dumps(res)
 
@@ -228,8 +232,12 @@ def setPosture(value):
     )
 
 
-#dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-#statustable = dynamodb.Table('statustable')
+def getNewSession():
+    return str(uuid.uuid4())
+
+
+# dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+# statustable = dynamodb.Table('statustable')
 
 print('Posture is....' + getPosture())
 print('Person Present is...' + getStatus())
@@ -253,7 +261,7 @@ def infinite_infer_run():
     people_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True, root=MODEL_PATH)
     pose_net = model_zoo.get_model('simple_pose_resnet18_v1b', pretrained=True, root=MODEL_PATH)
     people_detector.reset_class(["person"], reuse_weights=['person'])
-    sec_mark = 1
+    currentlyInSession = False
     while True:
         print("Person Present is: " + getStatus())
         print("Current posture is: " + getPosture())
@@ -284,8 +292,14 @@ def infinite_infer_run():
         if pose_input is None:
             print("no person detected")
             setStatus('False')
+            currentlyInSession = False
+            session = None
             continue
         print('person detected)')
+        if (currentlyInSession == False):
+            currentlyInSession = True
+            session = getNewSession()
+            print("New session created" + session)
         setStatus('True')
         print(pose_input.shape)
 
@@ -304,13 +318,12 @@ def infinite_infer_run():
         # Creating JSON
         start = time()
         result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
-        
-        
-        # Now we publish the sns
-        cloud_output = {"out": result_json}
-        client.publish(topic=iot_topic, payload=json.dumps(cloud_output))
-        
+        print(result_json)
         print('--------------Created JSON: {}s'.format(time() - start))
+        # Now we publish the sns
+        if (currentlyInSession == True):  # publish only if person is present.
+            cloud_output = '{"out":' + result_json + '}'
+            client.publish(topic=iot_topic, payload=cloud_output)
 
         print('===========================.Entire loop took{}s'.format(time() - loopstart))
 
