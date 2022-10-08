@@ -60,5 +60,18 @@ class LocalDisplay(Thread):
             raise Exception('Failed to set frame data')
         self.frame = jpeg
 
+    def reset_frame_data(self):
+        """ Method updates the image data. This currently encodes the
+            numpy array to jpg but can be modified to support other encodings.
+            frame - Numpy array containing the image data of the next frame
+                    in the project stream.
+        """
+        #ret, jpeg = cv2.imread('/tmp/yogapose.jpg')
+        #if not ret:
+        #    raise Exception('Failed to set frame data')
+        #self.frame = jpeg
+        self.frame = cv2.imencode('.jpg', 255*np.ones([640, 480, 3]))[1]
+        self.stop_request = Event()
+
     def join(self):
         self.stop_request.set()
