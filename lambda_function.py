@@ -7,8 +7,6 @@ import math
 from local_display import LocalDisplay
 import numpy as np
 from time import time
-# from matplotlib import pyplot as plt
-# Pls see requirements.txt
 from mxnet import nd
 from gluoncv import model_zoo, data, utils
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
@@ -17,13 +15,6 @@ import datetime
 import boto3
 from boto3.dynamodb.conditions import Key
 import uuid
-
-s3 = boto3.client("s3")
-S3_BUCKET = 'deeplens-basic-posturedetector'
-DATA_BUFFER = 60  # Not used but kept for future uses.
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-statustable = dynamodb.Table('statustable')
-session = '132wqdqwe123'
 
 # The below are the main definitions for our human boday parts
 keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear', 'Left Ear', 'Right Shoulder',
@@ -40,7 +31,7 @@ BodyForm = {
     'Hips': ['Left Hip', 'Right Hip'],
     'Shoulders': ['Left Shoulder', 'Right Shoulder'],
 }
-
+session = None # Session id is null because no person is present unless camera detects person.
 # WE NEED TO REPLACE THSI WITH A DATABASE
 ground_truth_angles = {'Right Lower Arm': {'GT Angle': 0.0},
                        'Left Lower Arm': {'GT Angle': 0.0},
@@ -172,17 +163,8 @@ def lambda_handler(event, context):
     print("hello world")
     return
 
-
-# This is the original lambda handler func. - not touched
-def lambda_handler(event, context):
-    """Empty entry point to the Lambda function invoked from the edge."""
-    print("hello world")
-    return
-
-
-def write_to_s3(localfile, bucket, objectname):
-    s3.upload_file(localfile, bucket, objectname)
-
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+statustable = dynamodb.Table('statustable')
 
 def getStatus():
     response = statustable.get_item(
@@ -190,9 +172,7 @@ def getStatus():
             'statuskey': 'personpresent'
         }
     )
-    print(response)
     statusvalue = response['Item']['statusvalue']
-    print(statusvalue)
     return statusvalue
 
 
@@ -214,9 +194,7 @@ def getPosture():
             'statuskey': 'currentposture'
         }
     )
-    print(response)
     statusvalue = response['Item']['statusvalue']
-    print(statusvalue)
     return statusvalue
 
 
@@ -230,17 +208,30 @@ def setPosture(value):
             ':statusvalue': value
         }
     )
+def getDeviationExceeded():
+    response = statustable.get_item(
+        Key={
+            'statuskey': 'deviationexceeded'
+        }
+    )
+    statusvalue = response['Item']['statusvalue']
+    return statusvalue
+
+
+def setDeviationExceeded(value):
+    statustable.update_item(
+        Key={
+            'statuskey': 'deviationexceeded',
+        },
+        UpdateExpression='SET statusvalue = :statusvalue',
+        ExpressionAttributeValues={
+            ':statusvalue': value
+        }
+    )
 
 
 def getNewSession():
     return str(uuid.uuid4())
-
-
-# dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-# statustable = dynamodb.Table('statustable')
-
-print('Posture is....' + getPosture())
-print('Person Present is...' + getStatus())
 
 
 # This is the original function
@@ -254,6 +245,7 @@ def infinite_infer_run():
     # file that the image can be rendered locally.
     local_display = LocalDisplay('480p')
     local_display.start()
+    local_display.reset_frame_data()
 
     MODEL_PATH = '/opt/awscam/artifacts/'
 
@@ -261,47 +253,46 @@ def infinite_infer_run():
     people_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True, root=MODEL_PATH)
     pose_net = model_zoo.get_model('simple_pose_resnet18_v1b', pretrained=True, root=MODEL_PATH)
     people_detector.reset_class(["person"], reuse_weights=['person'])
-    currentlyInSession = False
+    currentlyInSession = False #Assume we start with no person in front of DeepLens
+
     while True:
-        print("Person Present is: " + getStatus())
-        print("Current posture is: " + getPosture())
+        print('===========================sarting new loop:')
         loopstart = time()
         # Get a frame from the video stream
         start = time()
-        _, frame = awscam.getLastFrame()
+        ret, frame = awscam.getLastFrame()
         # frame = cv2.resize(frame, (380, 672))
-        posture = getPosture()
+        posture = getPosture()#get current posture from dynamodb
         # cv2.putText(image, posture, org, font,
         #           fontScale, color, thickness, cv2.LINE_AA)
         print('---------------Load frame: {}s'.format(time() - start))
-        print(frame.shape)
 
         start = time()
         x, img = data.transforms.presets.ssd.transform_test(nd.array(frame), short=256)
-        print('---------------.transform_test{}s'.format(time() - start))
-        print('---------------Shape of pre-processed image:{}s', x.shape)
+        print('---------------transform_test: {}s'.format(time() - start))
 
         start = time()
         class_ids, scores, bboxes = people_detector(x)
-        print('---------------Detection: {}s'.format(time() - start))
+        print('---------------people_detector: {}s'.format(time() - start))
 
         start = time()
         pose_input, upscale_bbox = detector_to_simple_pose(img, class_ids, scores, bboxes)
-        print('---------------.transform_test{}s'.format(time() - start))
+        print('---------------detector_to_simple_pose: {}s'.format(time() - start))
 
         if pose_input is None:
             print("no person detected")
             setStatus('False')
             currentlyInSession = False
             session = None
-            continue
+            local_display.reset_frame_data()
+            continue # do not process further
+        #if it comes here, then a valid person has been detected
         print('person detected)')
         if (currentlyInSession == False):
             currentlyInSession = True
             session = getNewSession()
             print("New session created" + session)
-        setStatus('True')
-        print(pose_input.shape)
+            setStatus('True') # update dynamodb
 
         start = time()
         predicted_heatmap = pose_net(pose_input)
@@ -309,22 +300,26 @@ def infinite_infer_run():
 
         start = time()
         coords, confidence = heatmap_to_coord(predicted_heatmap, upscale_bbox)
-        print('--------------Coords from heatma: {}s'.format(time() - start))
+        print('--------------Coords from heatmap: {}s'.format(time() - start))
 
+        start = time()
         ax = utils.viz.cv_plot_keypoints(img, coords, confidence, class_ids, bboxes, scores, box_thresh=0.5,
                                          keypoint_thresh=0.2)
-        local_display.set_frame_data(ax)
+        print('--------------rendered plot: {}s'.format(time() - start))
 
+        start = time()
+        local_display.set_frame_data(ax)
+        print('--------------updated local display: {}s'.format(time() - start))
         # Creating JSON
         start = time()
         result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
-        print(result_json)
         print('--------------Created JSON: {}s'.format(time() - start))
-        # Now we publish the sns
-        if (currentlyInSession == True):  # publish only if person is present.
-            cloud_output = '{"out":' + result_json + '}'
-            client.publish(topic=iot_topic, payload=cloud_output)
 
+        # Now we publish the iot topic
+        start = time()
+        cloud_output = '{"out":' + result_json + '}'
+        client.publish(topic=iot_topic, payload=cloud_output)
+        print('--------------published to IOT topic: {}s'.format(time() - start))
         print('===========================.Entire loop took{}s'.format(time() - loopstart))
 
 
