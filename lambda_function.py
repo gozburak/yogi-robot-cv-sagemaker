@@ -31,7 +31,7 @@ BodyForm = {
     'Hips': ['Left Hip', 'Right Hip'],
     'Shoulders': ['Left Shoulder', 'Right Shoulder'],
 }
-session = None # Session id is null because no person is present unless camera detects person.
+session =None# Session id is null because no person is present unless camera detects person.
 # WE NEED TO REPLACE THSI WITH A DATABASE
 ground_truth_angles = {'Right Lower Arm': {'GT Angle': 0.0},
                        'Left Lower Arm': {'GT Angle': 0.0},
@@ -118,7 +118,7 @@ def calculate_deviations(paramsBodyparts):
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
 # ... 'create_json' replaces the original 'update_state_json' function
-def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic):
+def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic, session):
     # numpy is needed for better calculation of metrics
     pred_coords_clean = pred_coords.asnumpy()
     confidence_clean = confidence.asnumpy()
@@ -312,7 +312,7 @@ def infinite_infer_run():
         print('--------------updated local display: {}s'.format(time() - start))
         # Creating JSON
         start = time()
-        result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic)
+        result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic, session)
         print('--------------Created JSON: {}s'.format(time() - start))
 
         # Now we publish the iot topic
