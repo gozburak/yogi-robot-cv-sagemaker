@@ -33,14 +33,14 @@ BodyForm = {
 }
 session =None# Session id is null because no person is present unless camera detects person.
 # WE NEED TO REPLACE THSI WITH A DATABASE
-ground_truth_angles = {'Right Lower Arm': {'GT Angle': 0.0},
-                       'Left Lower Arm': {'GT Angle': 0.0},
-                       'Right Upper Arm': {'GT Angle': -10.0},
-                       'Left Upper Arm': {'GT Angle': 10.0},
-                       'Right Thigh': {'GT Angle': 60},
-                       'Left Thigh': {'GT Angle': -60},
+ground_truth_angles = {'Right Lower Arm': {'GT Angle': -45.0},
+                       'Left Lower Arm': {'GT Angle': -45.0},
+                       'Right Upper Arm': {'GT Angle': -45.0},
+                       'Left Upper Arm': {'GT Angle': -45.0},
+                       'Right Thigh': {'GT Angle': 45.0},
+                       'Left Thigh': {'GT Angle': 45.0},
                        'Hips': {'GT Angle': 0.0},
-                       'Shoulders': {'GT Angle': 0.0}}
+                       'Shoulders': {'GT Angle': 00.0}}
 
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
