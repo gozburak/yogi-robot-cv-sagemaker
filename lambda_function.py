@@ -8,44 +8,20 @@ from time import time
 from mxnet import nd
 from gluoncv import model_zoo, data, utils
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
-import boto3
 import uuid
-
-# The below are the main definitions for our human boday parts
-
-# WE NEED TO REPLACE THSI WITH A DATABASE
-
-
-# These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
-
-
-# This build the joints object
-
-
-# This builds the body parts
-
-
-# This calculates orientations
-
-
-# This calculates deviations from the ground truth
-
-
-# These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
-# ... 'create_json' replaces the original 'update_state_json' function
 from posture_analysis import create_json
 
-
+session = None  # Session id is null because no person is present unless camera detects person.
 # This is the original lambda handler func. - not touched
 def lambda_handler(event, context):
     """Empty entry point to the Lambda function invoked from the edge."""
     print("hello world")
     return
 
-
-
 def getNewSession():
     return str(uuid.uuid4())
+
+def noPersonDetected():
 
 
 # This is the original function
@@ -75,11 +51,6 @@ def infinite_infer_run():
     # the number of labels is small we create a dictionary that will help us convert
     # the machine labels to human readable labels.
     model_type = 'ssd'
-    output_map = {1: 'aeroplane', 2: 'bicycle', 3: 'bird', 4: 'boat', 5: 'bottle', 6: 'bus',
-                  7: 'car', 8: 'cat', 9: 'chair', 10: 'cow', 11: 'dinning table',
-                  12: 'dog', 13: 'horse', 14: 'motorbike', 15: 'person',
-                  16: 'pottedplant', 17: 'sheep', 18: 'sofa', 19: 'train',
-                  20: 'tvmonitor'}
     # The sample projects come with optimized artifacts, hence only the artifact
     # path is required.
     model_path = '/opt/awscam/artifacts/mxnet_deploy_ssd_resnet50_300_FP16_FUSED.xml'
@@ -110,13 +81,24 @@ def infinite_infer_run():
         for obj in parsed_inference_results[model_type]:
             if (((obj['label']) == person)and(obj['prob'] > detection_threshold)):
                 personcount += 1
-        if (personcount == 0):
-            print("No person detected")
-            continue
         print("Number of people detected: " + str(personcount))
+        if (personcount == 0):
+            print("no person detected")
+            dynamodb.setStatus('False')
+            currentlyInSession = False
+            session = None
+            local_display.reset_frame_data()
+            continue  # do not process further
+        if (personcount > 1):
+            print("too many persons detected")
+            dynamodb.setStatus('False')
+            currentlyInSession = False
+            session = None
+            local_display.reset_frame_data()
+            continue  # do not process further
+
 
         ##### end code to detect person
-        # frame = cv2.resize(frame, (380, 672))
         posture = dynamodb.getPosture()  # get current posture from dynamodb
         # cv2.putText(image, posture, org, font,
         #           fontScale, color, thickness, cv2.LINE_AA)
