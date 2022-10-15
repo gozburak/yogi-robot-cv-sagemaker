@@ -1,160 +1,39 @@
 import awscam
-import json
 import cv2
 import greengrasssdk
 import os
-import math
 from local_display import LocalDisplay
-import numpy as np
+from dynamodb import Dynamodb
 from time import time
 from mxnet import nd
 from gluoncv import model_zoo, data, utils
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
-from math import atan2, degrees
-import datetime
 import boto3
-from boto3.dynamodb.conditions import Key
 import uuid
 
 # The below are the main definitions for our human boday parts
-keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear', 'Left Ear', 'Right Shoulder',
-               'Left Shoulder', 'Right Elbow', 'Left Elbow', 'Right Wrist', 'Left Wrist', 'Right Hip',
-               'Left Hip', 'Right Knee', 'Left Knee', 'Right Ankle', 'Left Ankle']
 
-BodyForm = {
-    'Right Lower Arm': ['Right Shoulder', 'Right Elbow'],
-    'Left Lower Arm': ['Left Shoulder', 'Left Elbow'],
-    'Right Upper Arm': ['Right Elbow', 'Right Wrist'],
-    'Left Upper Arm': ['Left Elbow', 'Left Wrist'],
-    'Right Thigh': ['Right Hip', 'Right Knee'],
-    'Left Thigh': ['Left Hip', 'Left Knee'],
-    'Hips': ['Left Hip', 'Right Hip'],
-    'Shoulders': ['Left Shoulder', 'Right Shoulder'],
-}
-session =None# Session id is null because no person is present unless camera detects person.
 # WE NEED TO REPLACE THSI WITH A DATABASE
-ground_truth_angles = {'Right Lower Arm': {'GT Angle': 0.0},
-                       'Left Lower Arm': {'GT Angle': 0.0},
-                       'Right Upper Arm': {'GT Angle': -10.0},
-                       'Left Upper Arm': {'GT Angle': 10.0},
-                       'Right Thigh': {'GT Angle': 60},
-                       'Left Thigh': {'GT Angle': -60},
-                       'Hips': {'GT Angle': 0.0},
-                       'Shoulders': {'GT Angle': 0.0}}
 
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
-class Joint():
-    def __init__(self, name, x, y, conf):
-        self.name = name
-        self.coords = (float(x), float(y))
-        self.conf = float(conf)
-
-
-class Bodypart():
-    def __init__(self, name, jointA, jointB):
-        self.jointA = jointA
-        self.jointB = jointB
-        self.name = name
-
-    def get_metrics(self):
-        self.vec = [b - a for a, b in zip(self.jointA.coords, self.jointB.coords)]
-        self.length = float(math.hypot(self.vec[1], self.vec[0]))
-        if self.vec[0] != 0:
-            self.orient = float(math.degrees(math.atan(self.vec[1] / self.vec[0])))
-        else:
-            self.orient = 90.0
-        self.conf = float(self.jointA.conf * self.jointA.conf)
 
 
 # This build the joints object
-def get_joints_params(allJoints):
-    paramsJoints = []
-    for allJoints_pp in allJoints:
-        paramsJoints_pp = {}
-        for joint_name in keys_Joints:
-            joint = allJoints_pp[joint_name]
-            paramsJoints_pp.update({joint_name: {"Coords": joint.coords, "Conf": joint.conf}})
-        paramsJoints.append(paramsJoints_pp)
-    return paramsJoints
 
 
 # This builds the body parts
-def get_bodyparts_params(allBodyparts):
-    paramsBodyparts = []
-    for allBodyparts_pp in allBodyparts:
-        paramsBodyparts_pp = {}
-        for bodypart_name in BodyForm:
-            body = allBodyparts_pp[bodypart_name]
-            paramsBodyparts_pp.update({bodypart_name: {"Angle": body.orient, "Conf": body.conf}})
-        paramsBodyparts.append(paramsBodyparts_pp)
-    return paramsBodyparts
 
 
 # This calculates orientations
-def build_body_from_joints(allJoints):
-    allBodyparts = []
-    for joint in allJoints:
-        iter_body = {}
-        for bodypart_name, joint_names in BodyForm.items():
-            body = Bodypart(bodypart_name, joint[joint_names[0]], joint[joint_names[1]])
-            body.get_metrics()
-            iter_body.update({bodypart_name: body})
-        allBodyparts.append(iter_body)
-    return allBodyparts
 
 
 # This calculates deviations from the ground truth
-def calculate_deviations(paramsBodyparts):
-    deviations = []
-    for paramsBodyparts_pp in paramsBodyparts:
-        deviations_pp = {}
-        for bodypart_name, data in paramsBodyparts_pp.items():
-            diff = data['Angle'] - ground_truth_angles[bodypart_name]['GT Angle']
-            deviations_pp.update({bodypart_name: {'Diff': diff}})
-        deviations.append(deviations_pp)
-    return deviations
 
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
 # ... 'create_json' replaces the original 'update_state_json' function
-def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic, session):
-    # numpy is needed for better calculation of metrics
-    pred_coords_clean = pred_coords.asnumpy()
-    confidence_clean = confidence.asnumpy()
-    bounding_boxs_clean = bboxes.asnumpy()
-    scores_clean = scores.asnumpy()
-
-    # The following identifies the joints and body part dictionaries for the picture
-    allJoints = [{name: Joint(name, coord[0], coord[1], conf[0]) for name, coord, conf in
-                  zip(keys_Joints, coord_per_person, conf_per_person)} for coord_per_person, conf_per_person in
-                 zip(pred_coords_clean, confidence_clean)]
-    allBodyParts = build_body_from_joints(allJoints)
-
-    # We also transfer the bounding box
-    keys_BoundingBox = ["X0", "Y0", "Width", "Height"]
-    resBoundingBox = [{"BoundingBox": {"Coords": {key: float(value) for key, value in
-                                                  zip(keys_BoundingBox, Boundingbox_per_person[0])},
-                                       "Confidence": float(conf_per_person[0][0])}}
-                      for Boundingbox_per_person, conf_per_person in zip(bounding_boxs_clean, scores_clean)]
-
-    # Let's calculate the joint parts and body angles
-    paramsJoints = get_joints_params(allJoints)
-    paramsBodyparts = get_bodyparts_params(allBodyParts)
-
-    # Time stamp is added to the output
-    time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Calculating deviations
-    deviations = calculate_deviations(paramsBodyparts)
-
-    # This is the schema for our JSON
-    res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint, "Bodyparts": Body,
-            "Deviations": Devi}
-           for person, (Bbox, Joint, Body, Devi) in
-           enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
-
-    return json.dumps(res)
+from posture_analysis import create_json
 
 
 # This is the original lambda handler func. - not touched
@@ -163,71 +42,6 @@ def lambda_handler(event, context):
     print("hello world")
     return
 
-dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-statustable = dynamodb.Table('statustable')
-
-def getStatus():
-    response = statustable.get_item(
-        Key={
-            'statuskey': 'personpresent'
-        }
-    )
-    statusvalue = response['Item']['statusvalue']
-    return statusvalue
-
-
-def setStatus(value):
-    statustable.update_item(
-        Key={
-            'statuskey': 'personpresent'
-        },
-        UpdateExpression='SET statusvalue = :statusvalue',
-        ExpressionAttributeValues={
-            ':statusvalue': value
-        }
-    )
-
-
-def getPosture():
-    response = statustable.get_item(
-        Key={
-            'statuskey': 'currentposture'
-        }
-    )
-    statusvalue = response['Item']['statusvalue']
-    return statusvalue
-
-
-def setPosture(value):
-    statustable.update_item(
-        Key={
-            'statuskey': 'currentposture',
-        },
-        UpdateExpression='SET statusvalue = :statusvalue',
-        ExpressionAttributeValues={
-            ':statusvalue': value
-        }
-    )
-def getDeviationExceeded():
-    response = statustable.get_item(
-        Key={
-            'statuskey': 'deviationexceeded'
-        }
-    )
-    statusvalue = response['Item']['statusvalue']
-    return statusvalue
-
-
-def setDeviationExceeded(value):
-    statustable.update_item(
-        Key={
-            'statuskey': 'deviationexceeded',
-        },
-        UpdateExpression='SET statusvalue = :statusvalue',
-        ExpressionAttributeValues={
-            ':statusvalue': value
-        }
-    )
 
 
 def getNewSession():
@@ -247,22 +61,63 @@ def infinite_infer_run():
     local_display.start()
     local_display.reset_frame_data()
 
+    dynamodb = Dynamodb()
+
     MODEL_PATH = '/opt/awscam/artifacts/'
 
     # Load the models here
     people_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True, root=MODEL_PATH)
     pose_net = model_zoo.get_model('simple_pose_resnet18_v1b', pretrained=True, root=MODEL_PATH)
     people_detector.reset_class(["person"], reuse_weights=['person'])
-    currentlyInSession = False #Assume we start with no person in front of DeepLens
-
+    currentlyInSession = False  # Assume we start with no person in front of DeepLens
+    ############ Detect Person from Object Detection
+    # This object detection model is implemented as single shot detector (ssd), since
+    # the number of labels is small we create a dictionary that will help us convert
+    # the machine labels to human readable labels.
+    model_type = 'ssd'
+    output_map = {1: 'aeroplane', 2: 'bicycle', 3: 'bird', 4: 'boat', 5: 'bottle', 6: 'bus',
+                  7: 'car', 8: 'cat', 9: 'chair', 10: 'cow', 11: 'dinning table',
+                  12: 'dog', 13: 'horse', 14: 'motorbike', 15: 'person',
+                  16: 'pottedplant', 17: 'sheep', 18: 'sofa', 19: 'train',
+                  20: 'tvmonitor'}
+    # The sample projects come with optimized artifacts, hence only the artifact
+    # path is required.
+    model_path = '/opt/awscam/artifacts/mxnet_deploy_ssd_resnet50_300_FP16_FUSED.xml'
+    # Load the model onto the GPU.
+    model = awscam.Model(model_path, {'GPU': 1})
+    # Set the threshold for detection
+    detection_threshold = 0.25
+    # The height and width of the training set images
+    input_height = 300
+    input_width = 300
+    person = 15
+    detection_threshold = 0.5
+    # Do inference until the lambda is killed.
     while True:
         print('===========================sarting new loop:')
         loopstart = time()
         # Get a frame from the video stream
         start = time()
         ret, frame = awscam.getLastFrame()
+        ##### code to detect person
+        frame_resize = cv2.resize(frame, (input_height, input_width))
+        # Run the images through the inference engine and parse the results using
+        # the parser API, note it is possible to get the output of doInference
+        # and do the parsing manually, but since it is a ssd model,
+        # a simple API is provided.
+        parsed_inference_results = model.parseResult(model_type, model.doInference(frame_resize))
+        personcount = 0
+        for obj in parsed_inference_results[model_type]:
+            if (((obj['label']) == person)and(obj['prob'] > detection_threshold)):
+                personcount += 1
+        if (personcount == 0):
+            print("No person detected")
+            continue
+        print("Number of people detected: " + str(personcount))
+
+        ##### end code to detect person
         # frame = cv2.resize(frame, (380, 672))
-        posture = getPosture()#get current posture from dynamodb
+        posture = dynamodb.getPosture()  # get current posture from dynamodb
         # cv2.putText(image, posture, org, font,
         #           fontScale, color, thickness, cv2.LINE_AA)
         print('---------------Load frame: {}s'.format(time() - start))
@@ -281,18 +136,18 @@ def infinite_infer_run():
 
         if pose_input is None:
             print("no person detected")
-            setStatus('False')
+            dynamodb.setStatus('False')
             currentlyInSession = False
             session = None
             local_display.reset_frame_data()
-            continue # do not process further
-        #if it comes here, then a valid person has been detected
+            continue  # do not process further
+        # if it comes here, then a valid person has been detected
         print('person detected)')
         if (currentlyInSession == False):
             currentlyInSession = True
             session = getNewSession()
             print("New session created" + session)
-            setStatus('True') # update dynamodb
+            dynamodb.setStatus('True')  # update dynamodb
 
         start = time()
         predicted_heatmap = pose_net(pose_input)
