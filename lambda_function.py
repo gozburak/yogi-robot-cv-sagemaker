@@ -21,9 +21,6 @@ def lambda_handler(event, context):
 def getNewSession():
     return str(uuid.uuid4())
 
-def noPersonDetected():
-
-
 # This is the original function
 def infinite_infer_run():
     """ Run the DeepLens inference loop frame by frame"""
@@ -83,7 +80,7 @@ def infinite_infer_run():
                 personcount += 1
         print("Number of people detected: " + str(personcount))
         if (personcount == 0):
-            print("no person detected")
+            print("No person detected")
             dynamodb.setStatus('False')
             currentlyInSession = False
             session = None
@@ -96,8 +93,13 @@ def infinite_infer_run():
             session = None
             local_display.reset_frame_data()
             continue  # do not process further
-
-
+        #if it comes here, exactly one person is detected
+        print('person detected)')
+        if (currentlyInSession == False):
+            currentlyInSession = True
+            session = getNewSession()
+            print("New session created" + session)
+            dynamodb.setStatus('True')  # update dynamodb
         ##### end code to detect person
         posture = dynamodb.getPosture()  # get current posture from dynamodb
         # cv2.putText(image, posture, org, font,
@@ -116,6 +118,11 @@ def infinite_infer_run():
         pose_input, upscale_bbox = detector_to_simple_pose(img, class_ids, scores, bboxes)
         print('---------------detector_to_simple_pose: {}s'.format(time() - start))
 
+        #Should never happen - but...
+        if pose_input is None:
+            continue
+
+        ''' # Is this really needed? We did check the number of people earlier.
         if pose_input is None:
             print("no person detected")
             dynamodb.setStatus('False')
@@ -130,7 +137,7 @@ def infinite_infer_run():
             session = getNewSession()
             print("New session created" + session)
             dynamodb.setStatus('True')  # update dynamodb
-
+        '''
         start = time()
         predicted_heatmap = pose_net(pose_input)
         print('---------------heatmap: {}s'.format(time() - start))
