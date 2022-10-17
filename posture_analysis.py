@@ -1,7 +1,7 @@
 import datetime
 import json
 import math
-
+# The below are the main definitions for our human boday parts
 keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear', 'Left Ear', 'Right Shoulder',
                'Left Shoulder', 'Right Elbow', 'Left Elbow', 'Right Wrist', 'Left Wrist', 'Right Hip',
                'Left Hip', 'Right Knee', 'Left Knee', 'Right Ankle', 'Left Ankle']
@@ -15,17 +15,18 @@ BodyForm = {
     'Hips': ['Left Hip', 'Right Hip'],
     'Shoulders': ['Left Shoulder', 'Right Shoulder'],
 }
-session = None  # Session id is null because no person is present unless camera detects person.
-ground_truth_angles = {'Right Lower Arm': {'GT Angle': 0.0},
-                       'Left Lower Arm': {'GT Angle': 0.0},
-                       'Right Upper Arm': {'GT Angle': -10.0},
-                       'Left Upper Arm': {'GT Angle': 10.0},
-                       'Right Thigh': {'GT Angle': 60},
-                       'Left Thigh': {'GT Angle': -60},
+
+# WE NEED TO REPLACE THSI WITH A DATABASE
+ground_truth_angles = {'Right Lower Arm': {'GT Angle': -45.0},
+                       'Left Lower Arm': {'GT Angle': -45.0},
+                       'Right Upper Arm': {'GT Angle': -45.0},
+                       'Left Upper Arm': {'GT Angle': -45.0},
+                       'Right Thigh': {'GT Angle': 45.0},
+                       'Left Thigh': {'GT Angle': 45.0},
                        'Hips': {'GT Angle': 0.0},
-                       'Shoulders': {'GT Angle': 0.0}}
+                       'Shoulders': {'GT Angle': 00.0}}
 
-
+# These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
 class Joint():
     def __init__(self, name, x, y, conf):
         self.name = name
@@ -48,7 +49,7 @@ class Bodypart():
             self.orient = 90.0
         self.conf = float(self.jointA.conf * self.jointA.conf)
 
-
+# This build the joints object
 def get_joints_params(allJoints):
     paramsJoints = []
     for allJoints_pp in allJoints:
@@ -59,7 +60,7 @@ def get_joints_params(allJoints):
         paramsJoints.append(paramsJoints_pp)
     return paramsJoints
 
-
+# This builds the body parts
 def get_bodyparts_params(allBodyparts):
     paramsBodyparts = []
     for allBodyparts_pp in allBodyparts:
@@ -70,7 +71,7 @@ def get_bodyparts_params(allBodyparts):
         paramsBodyparts.append(paramsBodyparts_pp)
     return paramsBodyparts
 
-
+# This calculates orientations
 def build_body_from_joints(allJoints):
     allBodyparts = []
     for joint in allJoints:
@@ -82,7 +83,7 @@ def build_body_from_joints(allJoints):
         allBodyparts.append(iter_body)
     return allBodyparts
 
-
+# This calculates deviations from the ground truth
 def calculate_deviations(paramsBodyparts):
     deviations = []
     for paramsBodyparts_pp in paramsBodyparts:
@@ -93,7 +94,8 @@ def calculate_deviations(paramsBodyparts):
         deviations.append(deviations_pp)
     return deviations
 
-
+# These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
+# ... 'create_json' replaces the original 'update_state_json' function
 def create_json(pred_coords, confidence, bboxes, scores, client, iot_topic, session):
     # numpy is needed for better calculation of metrics
     pred_coords_clean = pred_coords.asnumpy()
