@@ -9,7 +9,7 @@ from mxnet import nd
 from gluoncv import model_zoo, data, utils
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
 import uuid
-from posture_analysis import create_json
+from posture_analysis import PostureAnalysis
 
 session = None  # Session id is null because no person is present unless camera detects person.
 # This is the original lambda handler func. - not touched
@@ -37,6 +37,8 @@ def infinite_infer_run():
     dynamodb = Dynamodb()
 
     MODEL_PATH = '/opt/awscam/artifacts/'
+
+    postureAnalysis = PostureAnalysis()
 
     # Load the models here
     people_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True, root=MODEL_PATH)
@@ -156,7 +158,7 @@ def infinite_infer_run():
         print('--------------updated local display: {}s'.format(time() - start))
         # Creating JSON
         start = time()
-        result_json = create_json(coords, confidence, bboxes, scores, client, iot_topic, session)
+        result_json = postureAnalysis.create_json(coords, confidence, bboxes, scores, client, iot_topic, session)
         print('--------------Created JSON: {}s'.format(time() - start))
 
         # Now we publish the iot topic
