@@ -106,12 +106,10 @@ class PostureAnalysis():
         confidence_clean = confidence.asnumpy()
         bounding_boxs_clean = bboxes.asnumpy()
         scores_clean = scores.asnumpy()
-        print("before allJoints")
         # The following identifies the joints and body part dictionaries for the picture
         allJoints = [{name: Joint(name, coord[0], coord[1], conf[0]) for name, coord, conf in
                       zip(self.keys_Joints, coord_per_person, conf_per_person)} for coord_per_person, conf_per_person in
                      zip(pred_coords_clean, confidence_clean)]
-        print("after allJoints")
         allBodyParts = self.build_body_from_joints(allJoints)
 
         # We also transfer the bounding box

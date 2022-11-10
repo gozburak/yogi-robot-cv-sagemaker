@@ -1,7 +1,7 @@
 from __future__ import division
 import argparse, time, logging, os, math, tqdm, cv2
 import uuid
-
+import greengrass
 import boto3
 import numpy as np
 import mxnet as mx
@@ -28,7 +28,7 @@ POSEMODEL_SHA=settings.POSEMODEL_SHA
 SERVER_SECRET_KEY = settings.AWS_SERVER_SECRET_KEY
 SERVER_PUBLIC_KEY = settings.AWS_SERVER_PUBLIC_KEY
 REGION_NAME = settings.REGION_NAME
-
+#python pubsub.py --endpoint a2h8id2qn57my5-ats.iot.us-east-1.amazonaws.com  --key ..\..\..\privKey.key  --cert ..\..\..\thingCert.crt --topic yogabot/stream  --client_id ashishlaptop
 #Initialize dynamodb
 dynamodb = boto3.client('dynamodb',
                         aws_access_key_id=SERVER_PUBLIC_KEY,

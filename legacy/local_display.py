@@ -11,6 +11,7 @@ class LocalDisplay(Thread):
         results can be rendered using mplayer by typing:
         mplayer -demuxer lavf -lavfdopts format=mjpeg:probesize=32 /tmp/results.mjpeg
     """
+    yoga_image_path = "/tmp/yoga.jpg"
     def __init__(self, resolution):
         """ resolution - Desired resolution of the project stream """
         # Initialize the base class, so that the object can run on its own
@@ -23,7 +24,9 @@ class LocalDisplay(Thread):
         self.resolution = RESOLUTION[resolution]
         # Initialize the default image to be a white canvas. Clients
         # will update the image when ready.
-        self.frame = cv2.imencode('.jpg', 255*np.ones([640, 480, 3]))[1]
+        #self.frame = cv2.imencode('.jpg', 255*np.ones([640, 480, 3]))[1]
+        jpeg = cv2.imread('/tmp/yoga.jpg')
+        self.frame = cv2.imencode('.jpg', jpeg)[1]
         self.stop_request = Event()
 
     def run(self):
@@ -59,6 +62,18 @@ class LocalDisplay(Thread):
         if not ret:
             raise Exception('Failed to set frame data')
         self.frame = jpeg
+
+    def reset_frame_data(self):
+        """ Method updates the image data. This currently encodes the
+            numpy array to jpg but can be modified to support other encodings.
+            frame - Numpy array containing the image data of the next frame
+                    in the project stream.
+        """
+
+        #self.frame = cv2.imencode('.jpg', 255*np.ones([640, 480, 3]))[1]
+        jpeg = cv2.imread('/tmp/yoga.jpg')
+        self.frame = cv2.imencode('.jpg', jpeg)[1]
+        #self.stop_request = Event()
 
     def join(self):
         self.stop_request.set()
