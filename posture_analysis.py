@@ -88,19 +88,27 @@ class PostureAnalysis():
         return allBodyparts
 
     # This calculates deviations from the ground truth
-    def calculate_deviations(self, pose, paramsBodyparts):
+    def calculate_deviations(self, pose, paramsBodyparts, diff_threshold):
         deviations = []
+        booleon = []
         for paramsBodyparts_pp in paramsBodyparts:
             deviations_pp = {}
             for bodypart_name, data in paramsBodyparts_pp.items():
                 diff = data['Angle'] - self.ground_truth_angles[pose][bodypart_name]['GT Angle']
                 deviations_pp.update({bodypart_name: {'Diff': diff}})
+                if abs(diff) <= diff_threshold:
+                    booleon.append(True)
+                else:
+                    booleon.append(False)
             deviations.append(deviations_pp)
-        return deviations
+            return deviations, booleon 
 
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
     # ... 'create_json' replaces the original 'update_state_json' function
-    def create_json(self, pose, pred_coords, confidence, bboxes, scores, client, iot_topic, session):
+    def create_json(self, pred_coords, confidence, bboxes, scores, session, pose):
+        # Diff threshold
+        diff_threshold = 5
+        
         # numpy is needed for better calculation of metrics
         pred_coords_clean = pred_coords.asnumpy()
         confidence_clean = confidence.asnumpy()
@@ -129,10 +137,13 @@ class PostureAnalysis():
         time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Calculating deviations
-        deviations = self.calculate_deviations(pose, paramsBodyparts)
+        deviations, booleon = self.calculate_deviations(pose, paramsBodyparts,diff_threshold)
 
         # This is the schema for our JSON
-        res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, "Deviations": Devi}
-               for person, Devi in enumerate(deviations)]
+        res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
+                "Bodyparts": Body,
+                "Deviations": Devi}
+               for person, (Bbox, Joint, Body, Devi) in
+               enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
 
-        return json.dumps(res)
+        return booleon, json.dumps(res)
