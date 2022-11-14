@@ -1,15 +1,21 @@
 import boto3
 from boto3.dynamodb.conditions import Key
+import os
 
 
 class Dynamodb:
 
-    dynamodb = None
-    statustable = None
 
     def __init__(self):
-        self.dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
-        self.statustable = self.dynamodb.Table('statustable')
+        SERVER_SECRET_KEY = os.getenv("SECRET")
+        SERVER_PUBLIC_KEY = os.getenv("ACCESSKEY")
+        REGION_NAME = os.getenv('REGION_NAME')
+        self.dynamodb_client = dynamodb = boto3.resource('dynamodb',
+                                            aws_access_key_id=SERVER_PUBLIC_KEY,
+                                            aws_secret_access_key=SERVER_SECRET_KEY,
+                                            region_name=REGION_NAME
+                                            )
+        self.statustable = self.dynamodb_client.Table('statustable')
 
     def getStatus(self):
         response = self.statustable.get_item(
@@ -21,14 +27,19 @@ class Dynamodb:
         return statusvalue
 
 
-    def setStatus(self,value):
+    def setStatus(self,value, sessionid):
+        if (value == 'True'):
+            updatevalue = '{"presence": {"S": "'+ value + '"},"sessionID": {"S": "'+sessionid+'"}}'
+        else:
+            updatevalue = value
+
         self.statustable.update_item(
             Key={
                 'statuskey': 'personpresent'
             },
             UpdateExpression='SET statusvalue = :statusvalue',
             ExpressionAttributeValues={
-                ':statusvalue': value
+                ':statusvalue': updatevalue
             }
         )
 
@@ -75,3 +86,15 @@ class Dynamodb:
                 ':statusvalue': value
             }
         )
+
+    def setTooManyPeople(self, value):
+        self.statustable.update_item(
+            Key={
+                'statuskey': 'toomanypeople'
+            },
+            UpdateExpression='SET statusvalue = :statusvalue',
+            ExpressionAttributeValues={
+                ':statusvalue': value
+            }
+        )
+
