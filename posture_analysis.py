@@ -44,7 +44,7 @@ class PostureAnalysis():
     }
 
     # WE NEED TO REPLACE THSI WITH A DATABASE
-    ground_truth_angles = {'Chair Pose':{'Right Lower Arm': {'GT Angle': -45.0},
+    ground_truth_angles = {'chair':{'Right Lower Arm': {'GT Angle': -45.0},
                            'Left Lower Arm': {'GT Angle': -45.0},
                            'Right Upper Arm': {'GT Angle': -45.0},
                            'Left Upper Arm': {'GT Angle': -45.0},

@@ -43,6 +43,15 @@ class Dynamodb:
             }
         )
 
+    def setStatusek(self,value):
+        items_to_delete = [value]
+        with self.statustable.batch_writer() as batch:
+            for item in items_to_delete:
+                response = batch.put_item(Item={
+                    "statuskey": item["statuskey"],
+                    "statusvalue": item["statusvalue"]
+                })
+
 
     def getPosture(self):
         response = self.statustable.get_item(

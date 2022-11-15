@@ -11,7 +11,7 @@ import gluoncv as gcv
 gcv.utils.check_version('0.6.0')
 from gluoncv import data
 from gluoncv.data import mscoco
-from gluoncv.model_zoo import get_model
+from gluoncv.model_zoo import get_model, model_zoo
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
 from gluoncv.utils.viz import cv_plot_image, cv_plot_keypoints
 from dynamodb import Dynamodb
@@ -137,6 +137,14 @@ def initialize():
     img = mx.nd.array(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).astype('uint8')
     return img
 
+def get_Image(cap,testImage= False):
+    if testImage:
+        img = cv2.imread('./images/testImage.jpg')
+        return img
+    else:
+        ret, frame = cap.read()
+        return frame
+
 
 if __name__ == '__main__':
     img = initialize()
@@ -155,20 +163,22 @@ if __name__ == '__main__':
     cap = cv2.VideoCapture(0)
     time.sleep(1)  ### letting the camera autofocus
 
-    while(True): #Main loop
-        currentposture = dynamodb.getPosture()
+
+
 
     while(True): #Main loop
-        ret, frame = cap.read()
+        currentposture = dynamodb.getPosture()
+        frame = get_Image(cap, True)
         img = mx.nd.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).astype('uint8')
         x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
         x = x.as_in_context(ctx)
         class_IDs, scores, bounding_boxs = detector(x)
-        
+
+        #Wheelchair logic commented for now
         #Wheelchair detector
-        wheelchair_Flag = find_wheelchair(chair_detector, x_chair, img_chair)
-        if wheelchair_Flag:
-            print("Wheelchair detected!")
+        #wheelchair_Flag = find_wheelchair(chair_detector, x_chair, img_chair)
+        #if wheelchair_Flag:
+        #    print("Wheelchair detected!")
         
         #count number of people
         peoplecount = count_people(class_IDs,scores,bounding_boxs)
@@ -207,6 +217,7 @@ if __name__ == '__main__':
                     addFeedback(img, True)
                 else:
                     addFeedback(img, False)
+                print(booleon)
 
         cv_plot_image(img)
 
