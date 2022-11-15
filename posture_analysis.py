@@ -33,25 +33,29 @@ class PostureAnalysis():
                    'Left Shoulder', 'Right Elbow', 'Left Elbow', 'Right Wrist', 'Left Wrist', 'Right Hip',
                    'Left Hip', 'Right Knee', 'Left Knee', 'Right Ankle', 'Left Ankle']
     BodyForm = {
-        'Right Lower Arm': ['Right Shoulder', 'Right Elbow'],
-        'Left Lower Arm': ['Left Shoulder', 'Left Elbow'],
-        'Right Upper Arm': ['Right Elbow', 'Right Wrist'],
-        'Left Upper Arm': ['Left Elbow', 'Left Wrist'],
-        'Right Thigh': ['Right Hip', 'Right Knee'],
-        'Left Thigh': ['Left Hip', 'Left Knee'],
-        'Hips': ['Left Hip', 'Right Hip'],
-        'Shoulders': ['Left Shoulder', 'Right Shoulder'],
+    'Right Lower Arm': ['Right Shoulder','Right Elbow'],
+    'Left Lower Arm': ['Left Shoulder','Left Elbow'],
+    'Right Upper Arm': ['Right Elbow', 'Right Wrist'],
+    'Left Upper Arm': ['Left Elbow', 'Left Wrist'],
+    'Right Thigh': ['Right Hip', 'Right Knee'],
+    'Left Thigh': ['Left Hip', 'Left Knee'],
+    'Right Leg': ['Right Knee', 'Right Ankle'],
+    'Left Leg': ['Left Knee', 'Left Ankle'],
+    'Hips': ['Left Hip', 'Right Hip'],
+    'Shoulders': ['Left Shoulder', 'Right Shoulder'],
     }
 
     # WE NEED TO REPLACE THSI WITH A DATABASE
-    ground_truth_angles = {'chair':{'Right Lower Arm': {'GT Angle': -45.0},
-                           'Left Lower Arm': {'GT Angle': -45.0},
-                           'Right Upper Arm': {'GT Angle': -45.0},
-                           'Left Upper Arm': {'GT Angle': -45.0},
-                           'Right Thigh': {'GT Angle': 45.0},
-                           'Left Thigh': {'GT Angle': 45.0},
-                           'Hips': {'GT Angle': 0.0},
-                           'Shoulders': {'GT Angle': 00.0}}}
+    ground_truth_angles = {'Chair Pose':{
+                           'Right Lower Arm': {'GT Angle': -45.0, 'Threshold': 20},
+                           'Left Lower Arm': {'GT Angle': -45.0, 'Threshold': 20},
+                           'Right Upper Arm': {'GT Angle': -60.0, 'Threshold': 15},
+                           'Left Upper Arm': {'GT Angle': -60.0, 'Threshold': 15},
+                           'Right Thigh': {'GT Angle': 45.0, 'Threshold': 15},
+                           'Left Thigh': {'GT Angle': 45.0, 'Threshold': 15},
+                           'Left Leg': {'GT Angle': -65.0, 'Threshold': 15},
+                           'Right Leg': {'GT Angle': -65.0, 'Threshold': 15}}}
+    
 
     # This build the joints object
     def get_joints_params(self, allJoints):
@@ -88,26 +92,26 @@ class PostureAnalysis():
         return allBodyparts
 
     # This calculates deviations from the ground truth
-    def calculate_deviations(self, pose, paramsBodyparts, diff_threshold):
+    def calculate_deviations(self, pose, paramsBodyparts):
         deviations = []
         booleon = []
         for paramsBodyparts_pp in paramsBodyparts:
             deviations_pp = {}
-            for bodypart_name, data in paramsBodyparts_pp.items():
-                diff = data['Angle'] - self.ground_truth_angles[pose][bodypart_name]['GT Angle']
+            booleon_pp = {}
+            for bodypart_name, GT_data in self.ground_truth_angles[pose].items():
+                diff = paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
                 deviations_pp.update({bodypart_name: {'Diff': diff}})
-                if abs(diff) <= diff_threshold:
-                    booleon.append(True)
+                if abs(diff) <= GT_data['Threshold']:
+                    booleon_pp.update({bodypart_name:True})
                 else:
-                    booleon.append(False)
+                    booleon_pp.update({bodypart_name:False})
+            booleon.append(booleon_pp)
             deviations.append(deviations_pp)
-            return deviations, booleon 
+        return deviations, booleon 
 
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
     # ... 'create_json' replaces the original 'update_state_json' function
     def create_json(self, pred_coords, confidence, bboxes, scores, session, pose):
-        # Diff threshold
-        diff_threshold = 5
         
         # numpy is needed for better calculation of metrics
         pred_coords_clean = pred_coords.asnumpy()
@@ -137,7 +141,7 @@ class PostureAnalysis():
         time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Calculating deviations
-        deviations, booleon = self.calculate_deviations(pose, paramsBodyparts,diff_threshold)
+        deviations, booleon = self.calculate_deviations(pose, paramsBodyparts)
 
         # This is the schema for our JSON
         res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
@@ -145,5 +149,7 @@ class PostureAnalysis():
                 "Deviations": Devi}
                for person, (Bbox, Joint, Body, Devi) in
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
-
-        return booleon, json.dumps(res)
+        
+        
+        
+        return all(booleon[0].values()),booleon, json.dumps(res)
