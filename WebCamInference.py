@@ -1,13 +1,12 @@
 from __future__ import division
 import argparse, time, logging, os, math, tqdm, cv2
 import uuid
-import greengrass
 import boto3
 import numpy as np
 import mxnet as mx
 from mxnet import gluon, nd, image
 from mxnet.gluon.data.vision import transforms
-
+import greengrasssdk
 import gluoncv as gcv
 gcv.utils.check_version('0.6.0')
 from gluoncv import data
@@ -15,26 +14,51 @@ from gluoncv.data import mscoco
 from gluoncv.model_zoo import get_model
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
 from gluoncv.utils.viz import cv_plot_image, cv_plot_keypoints
-
+from dynamodb import Dynamodb
+from awscrt import mqtt
+import sys
+import threading
+from uuid import uuid4
+import json
+from AvaMQTTHelper  import AvaMQTTHelper
 from python_settings import settings
 import settings as my_local_settings
 from posture_analysis import PostureAnalysis
 #Collect config settings:
-settings.configure(my_local_settings) # configure() receives a python module
+settings.configure(my_local_settings) # configure() receivesge a python module
 assert settings.configured # now you are set
 DETECTOR=settings.DETECTOR
 POSEMODEL=settings.POSEMODEL
 POSEMODEL_SHA=settings.POSEMODEL_SHA
-SERVER_SECRET_KEY = settings.AWS_SERVER_SECRET_KEY
-SERVER_PUBLIC_KEY = settings.AWS_SERVER_PUBLIC_KEY
-REGION_NAME = settings.REGION_NAME
+SERVER_SECRET_KEY = os.getenv("SECRET")
+SERVER_PUBLIC_KEY = os.getenv("ACCESSKEY")
+REGION_NAME = os.getenv('REGION_NAME')
+
+received_count = 0
+received_all_event = threading.Event()
+#is_ci = cmdUtils.get_command("is_ci", None) != None
+
+# Callback when connection is accidentally lost.
+def on_connection_interrupted(connection, error, **kwargs):
+    print("Connection interrupted. error: {}".format(error))
+
+
+# Callback when an interrupted connection is re-established.
+def on_connection_resumed(connection, return_code, session_present, **kwargs):
+    print("Connection resumed. return_code: {} session_present: {}".format(return_code, session_present))
+
+    if return_code == mqtt.ConnectReturnCode.ACCEPTED and not session_present:
+        print("Session did not persist. Resubscribing to existing topics...")
+        resubscribe_future, _ = connection.resubscribe_existing_topics()
+
+def sendMessage(message):
+    avaMQTTHelper.publishMessage(message)
+
+
 #python pubsub.py --endpoint a2h8id2qn57my5-ats.iot.us-east-1.amazonaws.com  --key ..\..\..\privKey.key  --cert ..\..\..\thingCert.crt --topic yogabot/stream  --client_id ashishlaptop
 #Initialize dynamodb
-dynamodb = boto3.client('dynamodb',
-                        aws_access_key_id=SERVER_PUBLIC_KEY,
-                        aws_secret_access_key=SERVER_SECRET_KEY,
-                        region_name=REGION_NAME
-                        )
+dynamodb = Dynamodb()
+avaMQTTHelper = AvaMQTTHelper()
 
 session = None  # Session id is null because no person is present unless camera detects person.
 postureAnalysis = PostureAnalysis()
@@ -109,7 +133,7 @@ def tooManyPeople(img):
     return img
 
 def initialize():
-    img = cv2.imread("./yoga.jpg")
+    img = cv2.imread("./images/yoga.jpg")
     img = mx.nd.array(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).astype('uint8')
     return img
 
@@ -132,6 +156,9 @@ if __name__ == '__main__':
     time.sleep(1)  ### letting the camera autofocus
 
     while(True): #Main loop
+        currentposture = dynamodb.getPosture()
+
+    while(True): #Main loop
         ret, frame = cap.read()
         img = mx.nd.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).astype('uint8')
         x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
@@ -148,15 +175,20 @@ if __name__ == '__main__':
         if (peoplecount ==0):
             img = initialize()
             session = None
+            dynamodb.setStatus('False', session)
+            dynamodb.setTooManyPeople('False')
 
 
         if(peoplecount > 1):
             img = tooManyPeople(frame)
-
+            dynamodb.setTooManyPeople('True')
 
         if(peoplecount==1):
             if (session == None):
                 session = getNewSession()
+            item = '{"statuskey":"personpresent", "statusvalue": { "presence": "True", "sessionID": "'+session+'" }}'
+            dynamodb.setStatusek(json.loads(item))
+            dynamodb.setTooManyPeople('False')
             pose_input, upscale_bbox = detector_to_simple_pose(scaled_img, class_IDs, scores, bounding_boxs,
                                                                output_shape=(128, 96), ctx=ctx)
             if len(upscale_bbox) > 0:
@@ -166,12 +198,16 @@ if __name__ == '__main__':
                 scale = 1.0 * img.shape[0] / scaled_img.shape[0]
                 img = cv_plot_keypoints(img.asnumpy(), pred_coords, confidence, class_IDs, bounding_boxs, scores,
                                         box_thresh=1, keypoint_thresh=0.3, scale=scale)
-                addFeedback(img, True)
-                result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores, client,
-                                                          iot_topic,
-                                                          session)
+                booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,
+                                                          session,currentposture)
                 cloud_output = '{"out":' + result_json + '}'
-                #client.publish(topic=iot_topic, payload=cloud_output)
+                print(cloud_output)
+                sendMessage(cloud_output)
+                if True in booleon:
+                    addFeedback(img, True)
+                else:
+                    addFeedback(img, False)
+
         cv_plot_image(img)
 
         if cv2.waitKey(10) & 0xFF == ord("q"):
