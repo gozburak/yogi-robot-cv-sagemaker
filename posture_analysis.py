@@ -44,14 +44,14 @@ class PostureAnalysis():
     }
 
     # WE NEED TO REPLACE THSI WITH A DATABASE
-    ground_truth_angles = {'Right Lower Arm': {'GT Angle': -45.0},
+    ground_truth_angles = {'Chair Pose':{'Right Lower Arm': {'GT Angle': -45.0},
                            'Left Lower Arm': {'GT Angle': -45.0},
                            'Right Upper Arm': {'GT Angle': -45.0},
                            'Left Upper Arm': {'GT Angle': -45.0},
                            'Right Thigh': {'GT Angle': 45.0},
                            'Left Thigh': {'GT Angle': 45.0},
                            'Hips': {'GT Angle': 0.0},
-                           'Shoulders': {'GT Angle': 00.0}}
+                           'Shoulders': {'GT Angle': 00.0}}}
 
     # This build the joints object
     def get_joints_params(self, allJoints):
@@ -88,28 +88,38 @@ class PostureAnalysis():
         return allBodyparts
 
     # This calculates deviations from the ground truth
-    def calculate_deviations(self, paramsBodyparts):
+    def calculate_deviations(self, pose, paramsBodyparts, diff_threshold):
         deviations = []
+        booleon = []
         for paramsBodyparts_pp in paramsBodyparts:
             deviations_pp = {}
             for bodypart_name, data in paramsBodyparts_pp.items():
-                diff = data['Angle'] - self.ground_truth_angles[bodypart_name]['GT Angle']
+                diff = data['Angle'] - self.ground_truth_angles[pose][bodypart_name]['GT Angle']
                 deviations_pp.update({bodypart_name: {'Diff': diff}})
+                if abs(diff) <= diff_threshold:
+                    booleon.append(True)
+                else:
+                    booleon.append(False)
             deviations.append(deviations_pp)
-        return deviations
+            return deviations, booleon 
 
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
     # ... 'create_json' replaces the original 'update_state_json' function
-    def create_json(self, pred_coords, confidence, bboxes, scores, client, iot_topic, session):
+    def create_json(self, pred_coords, confidence, bboxes, scores, session, pose):
+        # Diff threshold
+        diff_threshold = 5
+        
         # numpy is needed for better calculation of metrics
         pred_coords_clean = pred_coords.asnumpy()
         confidence_clean = confidence.asnumpy()
         bounding_boxs_clean = bboxes.asnumpy()
         scores_clean = scores.asnumpy()
+        print("before allJoints")
         # The following identifies the joints and body part dictionaries for the picture
         allJoints = [{name: Joint(name, coord[0], coord[1], conf[0]) for name, coord, conf in
                       zip(self.keys_Joints, coord_per_person, conf_per_person)} for coord_per_person, conf_per_person in
                      zip(pred_coords_clean, confidence_clean)]
+        print("after allJoints")
         allBodyParts = self.build_body_from_joints(allJoints)
 
         # We also transfer the bounding box
@@ -127,7 +137,7 @@ class PostureAnalysis():
         time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Calculating deviations
-        deviations = self.calculate_deviations(paramsBodyparts)
+        deviations, booleon = self.calculate_deviations(pose, paramsBodyparts,diff_threshold)
 
         # This is the schema for our JSON
         res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
@@ -136,4 +146,4 @@ class PostureAnalysis():
                for person, (Bbox, Joint, Body, Devi) in
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
 
-        return json.dumps(res)
+        return booleon, json.dumps(res)

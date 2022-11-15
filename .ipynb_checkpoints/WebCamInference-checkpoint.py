@@ -1,7 +1,7 @@
 from __future__ import division
 import argparse, time, logging, os, math, tqdm, cv2
 import uuid
-import greengrass
+
 import boto3
 import numpy as np
 import mxnet as mx
@@ -28,7 +28,7 @@ POSEMODEL_SHA=settings.POSEMODEL_SHA
 SERVER_SECRET_KEY = settings.AWS_SERVER_SECRET_KEY
 SERVER_PUBLIC_KEY = settings.AWS_SERVER_PUBLIC_KEY
 REGION_NAME = settings.REGION_NAME
-#python pubsub.py --endpoint a2h8id2qn57my5-ats.iot.us-east-1.amazonaws.com  --key ..\..\..\privKey.key  --cert ..\..\..\thingCert.crt --topic yogabot/stream  --client_id ashishlaptop
+
 #Initialize dynamodb
 dynamodb = boto3.client('dynamodb',
                         aws_access_key_id=SERVER_PUBLIC_KEY,
@@ -57,15 +57,6 @@ def count_people(class_ids, scores, bounding_boxes,threshold=0.5):
         if scores[index]>=threshold:
             num_people+=1
     return num_people
-
-def find_wheelchair(chair_detector, x_chair, img_chair):
-    class_IDs_chair, scores_chair, bounding_boxs_chair = chair_detector(x_chair)
-    chair_score = max(scores_chair[0].reshape(-1))
-    chair_detected = False
-    confidence_chair = None
-    if chair_score != -1 and chair_score > 0.01:
-        chair_detected = True
-    return chair_detected
 
 def addFeedback(img, correct=True):
     fontcolor = None
@@ -121,11 +112,6 @@ if __name__ == '__main__':
     #detector_name = "ssd_512_mobilenet1.0_coco"
     detector = get_model(DETECTOR, pretrained=True, ctx=ctx)
     detector.reset_class(classes=['person'], reuse_weights={'person': 'person'})
-    
-    #chair detector
-    chair_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True)
-    chair_detector.reset_class(["bicycle"], reuse_weights=['bicycle'])
-    
     net = get_model(POSEMODEL, pretrained=POSEMODEL_SHA, ctx=ctx)
     session = None
     cap = cv2.VideoCapture(0)
@@ -137,12 +123,7 @@ if __name__ == '__main__':
         x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
         x = x.as_in_context(ctx)
         class_IDs, scores, bounding_boxs = detector(x)
-        
-        #Wheelchair detector
-        wheelchair_Flag = find_wheelchair(chair_detector, x_chair, img_chair)
-        if wheelchair_Flag:
-            print("Wheelchair detected!")
-        
+
         #count number of people
         peoplecount = count_people(class_IDs,scores,bounding_boxs)
         if (peoplecount ==0):
