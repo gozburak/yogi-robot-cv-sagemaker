@@ -131,9 +131,9 @@ def tooManyPeople(img):
                 thickness,
                 lineType)
     return img
-
+imageCounter = 0
 def initialize():
-    img = cv2.imread("./images/yoga.jpg")
+    img = cv2.imread(".\images\yoga.jpg")
     img = mx.nd.array(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).astype('uint8')
     return img
 
@@ -168,7 +168,7 @@ if __name__ == '__main__':
 
     while(True): #Main loop
         currentposture = dynamodb.getPosture()
-        frame = get_Image(cap, True)
+        frame = get_Image(cap, False)
         img = mx.nd.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).astype('uint8')
         x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
         x = x.as_in_context(ctx)
@@ -208,17 +208,15 @@ if __name__ == '__main__':
                 scale = 1.0 * img.shape[0] / scaled_img.shape[0]
                 img = cv_plot_keypoints(img.asnumpy(), pred_coords, confidence, class_IDs, bounding_boxs, scores,
                                         box_thresh=1, keypoint_thresh=0.3, scale=scale)
-                booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,
+                poseCorrect, booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,
                                                           session,currentposture)
                 cloud_output = '{"out":' + result_json + '}'
                 print(cloud_output)
                 sendMessage(cloud_output)
-                if True in booleon:
+                if poseCorrect:
                     addFeedback(img, True)
                 else:
                     addFeedback(img, False)
-                print(booleon)
-
         cv_plot_image(img)
 
         if cv2.waitKey(10) & 0xFF == ord("q"):

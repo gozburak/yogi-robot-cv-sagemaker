@@ -184,3 +184,4 @@ class PostureAnalysis():
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
 
         return all(booleon[0].values()), booleon, json.dumps(res)
+
