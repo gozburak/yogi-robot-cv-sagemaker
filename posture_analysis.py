@@ -91,9 +91,17 @@ class PostureAnalysis():
         return allBodyparts
 
     # This calculates deviations from the ground truth
-    def calculate_deviations(self, pose, paramsBodyparts):
+    def calculate_deviations(self, pose, facing_direction, paramsBodyparts):
         deviations = []
         booleon = []
+        confidence_threshold = 0.35
+        
+        # Facing direction affects the ground truth
+        if facing_direction == "Left Facing":
+            adopter = -1
+        else:
+            adopter = 1
+            
         # exception ahndling, our default pose is chair pose
         if pose == '':
             pose = 'chair'
@@ -101,18 +109,38 @@ class PostureAnalysis():
             deviations_pp = {}
             booleon_pp = {}
             for bodypart_name, GT_data in self.ground_truth_angles[pose].items():
-                diff = paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
-                deviations_pp.update({bodypart_name: {'Diff': diff}})
-                if abs(diff) <= GT_data['Threshold']:
-                    booleon_pp.update({bodypart_name: True})
-                else:
-                    booleon_pp.update({bodypart_name: False})
+                if paramsBodyparts_pp[bodypart_name]['Conf'] >= confidence_threshold:
+                    diff = paramsBodyparts_pp[bodypart_name]['Angle'] - adopter*GT_data['GT Angle']
+                    deviations_pp.update({bodypart_name: {'Diff': diff}})
+                    if abs(diff) <= GT_data['Threshold']:
+                        booleon_pp.update({bodypart_name: True})
+                    else:
+                        booleon_pp.update({bodypart_name: False})
             booleon.append(booleon_pp)
             deviations.append(deviations_pp)
         return deviations, booleon
 
-        # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
-
+    
+    #get direction of the face - orientation
+    def get_facing_direction(self, allJoints):
+        diff_conf_threshold = 0.1
+        for allJoints_pp in allJoints:
+            right_joint_list = [allJoints_pp["Right Elbow"]['Conf'],allJoints_pp["Right Wrist"]['Conf'],
+              allJoints_pp["Right Knee"]['Conf'], allJoints_pp["Right Ankle"]['Conf'],  allJoints_pp["Right Ear"]['Conf']]
+            left_joint_list = [allJoints_pp["Left Elbow"]['Conf'],allJoints_pp["Left Wrist"]['Conf'],
+              allJoints_pp["Left Knee"]['Conf'], allJoints_pp["Left Ankle"]['Conf'],  allJoints_pp["Left Ear"]['Conf']]
+            avg_right_joint_conf = sum(right_joint_list)/len(right_joint_list)
+            avg_left_joint_conf = sum(left_joint_list)/len(left_joint_list)
+            difference = avg_right_joint_conf - avg_left_joint_conf
+            if difference > diff_conf_threshold:
+                side = "Left Facing"
+            elif difference < -diff_conf_threshold:
+                side = "Right Facing"
+            else:
+                side = "Probably Front"
+        return side
+    # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
+    
     # ... 'create_json' replaces the original 'update_state_json' function
     def create_json(self, pred_coords, confidence, bboxes, scores, session, pose):
 
@@ -124,8 +152,7 @@ class PostureAnalysis():
         print("before allJoints")
         # The following identifies the joints and body part dictionaries for the picture
         allJoints = [{name: Joint(name, coord[0], coord[1], conf[0]) for name, coord, conf in
-                      zip(self.keys_Joints, coord_per_person, conf_per_person)} for coord_per_person, conf_per_person in
-                     zip(pred_coords_clean, confidence_clean)]
+                      zip(self.keys_Joints, coord_per_person, conf_per_person)} for coord_per_person, conf_per_person in zip(pred_coords_clean, confidence_clean)]
         print("after allJoints")
         allBodyParts = self.build_body_from_joints(allJoints)
 
@@ -140,11 +167,14 @@ class PostureAnalysis():
         paramsJoints = self.get_joints_params(allJoints)
         paramsBodyparts = self.get_bodyparts_params(allBodyParts)
 
+        #Let determine side
+        facing_direction = self.get_facing_direction(paramsJoints)
+
         # Time stamp is added to the output
         time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Calculating deviations
-        deviations, booleon = self.calculate_deviations(pose, paramsBodyparts)
+        deviations, booleon = self.calculate_deviations(pose, facing_direction, paramsBodyparts)
 
         # This is the schema for our JSON
         res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
