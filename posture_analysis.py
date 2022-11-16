@@ -95,7 +95,7 @@ class PostureAnalysis():
         deviations = []
         booleon = []
         # exception ahndling, our default pose is chair pose
-        if pose = '':
+        if pose == '':
             pose = 'chair'
         for paramsBodyparts_pp in paramsBodyparts:
             deviations_pp = {}
