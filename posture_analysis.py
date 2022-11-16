@@ -94,10 +94,12 @@ class PostureAnalysis():
     def calculate_deviations(self, pose, paramsBodyparts):
         deviations = []
         booleon = []
+        # exception ahndling, our default pose is chair pose
+        if pose == '':
+            pose = 'chair'
         for paramsBodyparts_pp in paramsBodyparts:
             deviations_pp = {}
             booleon_pp = {}
-
             for bodypart_name, GT_data in self.ground_truth_angles[pose].items():
                 diff = paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
                 deviations_pp.update({bodypart_name: {'Diff': diff}})
@@ -152,3 +154,4 @@ class PostureAnalysis():
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
 
         return all(booleon[0].values()), booleon, json.dumps(res)
+
