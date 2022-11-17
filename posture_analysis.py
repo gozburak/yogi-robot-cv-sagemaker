@@ -32,6 +32,10 @@ class PostureAnalysis():
     keys_Joints = ['Nose', 'Right Eye', 'Left Eye', 'Right Ear', 'Left Ear', 'Right Shoulder',
                    'Left Shoulder', 'Right Elbow', 'Left Elbow', 'Right Wrist', 'Left Wrist', 'Right Hip',
                    'Left Hip', 'Right Knee', 'Left Knee', 'Right Ankle', 'Left Ankle']
+    
+    Parts_needed = ["Thigh", "Lower Arm", "Upper Arm"]
+    
+
     BodyForm = {
         'Right Lower Arm': ['Right Shoulder', 'Right Elbow'],
         'Left Lower Arm': ['Left Shoulder', 'Left Elbow'],
@@ -47,12 +51,12 @@ class PostureAnalysis():
 
     # WE NEED TO REPLACE THSI WITH A DATABASE
     ground_truth_angles = {'chair': {
-        'Right Lower Arm': {'GT Angle': -45.0, 'Threshold': 30},
-        'Left Lower Arm': {'GT Angle': -45.0, 'Threshold': 30},
-        'Right Upper Arm': {'GT Angle': -60.0, 'Threshold': 35},
-        'Left Upper Arm': {'GT Angle': -60.0, 'Threshold': 35},
-        'Right Thigh': {'GT Angle': 45.0, 'Threshold': 35},
-        'Left Thigh': {'GT Angle': 45.0, 'Threshold': 35},
+        'Right Lower Arm': {'GT Angle': -50.0, 'Threshold': 15},
+        'Left Lower Arm': {'GT Angle': -50.0, 'Threshold': 15},
+        'Right Upper Arm': {'GT Angle': -60.0, 'Threshold': 20},
+        'Left Upper Arm': {'GT Angle': -60.0, 'Threshold': 20},
+        'Right Thigh': {'GT Angle': 35.0, 'Threshold': 15},
+        'Left Thigh': {'GT Angle': 35.0, 'Threshold': 15},
         'Left Leg': {'GT Angle': -65.0, 'Threshold': 35},
         'Right Leg': {'GT Angle': -65.0, 'Threshold': 35}}}
 
@@ -110,7 +114,7 @@ class PostureAnalysis():
             booleon_pp = {}
             for bodypart_name, GT_data in self.ground_truth_angles[pose].items():
                 if paramsBodyparts_pp[bodypart_name]['Conf'] >= confidence_threshold:
-                    diff = paramsBodyparts_pp[bodypart_name]['Angle'] - adopter*GT_data['GT Angle']
+                    diff = adopter*paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
                     deviations_pp.update({bodypart_name: {'Diff': diff}})
                     if abs(diff) <= GT_data['Threshold']:
                         booleon_pp.update({bodypart_name: True})
@@ -143,14 +147,16 @@ class PostureAnalysis():
     # Analysis of difference
     def analyze_result(self,booleon):
         # The below confidence
-        minimum_conf_body_parts = 4
+        all_check = []
+        for Bodypart_required in self.Parts_needed:
+            check = False
+            for Bodypart_detected, value in booleon.items():
+                if Bodypart_required in Bodypart_detected:
+                    check = value
+                    break
+            all_check.append(check)
         
-        if len(booleon) < minimum_conf_body_parts:
-            final_boolean = False
-            print("Less than 4 body parts visibile with high confidence!")
-        else:
-            final_boolean = all(booleon.values())
-        return final_boolean
+        return all(all_check)
     
     
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
