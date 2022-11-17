@@ -1,5 +1,6 @@
 from __future__ import division
 import argparse, time, logging, os, math, tqdm, cv2
+from time import time
 import uuid
 import boto3
 import numpy as np
@@ -55,11 +56,8 @@ def sendMessage(message):
     avaMQTTHelper.publishMessage(message)
 
 
-#python pubsub.py --endpoint a2h8id2qn57my5-ats.iot.us-east-1.amazonaws.com  --key ..\..\..\privKey.key  --cert ..\..\..\thingCert.crt --topic yogabot/stream  --client_id ashishlaptop
-#Initialize dynamodb
 dynamodb = Dynamodb()
 avaMQTTHelper = AvaMQTTHelper()
-
 session = None  # Session id is null because no person is present unless camera detects person.
 postureAnalysis = PostureAnalysis()
 
@@ -132,8 +130,11 @@ def tooManyPeople(img):
                 lineType)
     return img
 imageCounter = 0
-def initialize():
-    img = cv2.imread(".\images\yoga.jpg")
+def initialize(imageIndex):
+    ImageArray = ["./images/yoga1.jpg", "./images/yoga2.jpg"]
+    count = len(ImageArray)
+    index = imageIndex%count
+    img = cv2.imread(ImageArray[index])
     img = mx.nd.array(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).astype('uint8')
     return img
 
@@ -147,9 +148,12 @@ def get_Image(cap,testImage= False):
 
 
 if __name__ == '__main__':
-    img = initialize()
+    lastActivityTime = time()-10
+    img = initialize(imageCounter)
+    imageCounter+=1
     cv_plot_image(img)
     ctx = mx.cpu()
+    imageIndex =0
     #detector_name = "ssd_512_mobilenet1.0_coco"
     detector = get_model(DETECTOR, pretrained=True, ctx=ctx)
     detector.reset_class(classes=['person'], reuse_weights={'person': 'person'})
@@ -161,11 +165,8 @@ if __name__ == '__main__':
     net = get_model(POSEMODEL, pretrained=POSEMODEL_SHA, ctx=ctx)
     session = None
     cap = cv2.VideoCapture(0)
-    time.sleep(1)  ### letting the camera autofocus
 
-
-
-
+    IDLE_SECONDS=3
     while(True): #Main loop
         currentposture = dynamodb.getPosture()
         frame = get_Image(cap, False)
@@ -183,10 +184,12 @@ if __name__ == '__main__':
         #count number of people
         peoplecount = count_people(class_IDs,scores,bounding_boxs)
         if (peoplecount ==0):
-            img = initialize()
-            session = None
-            dynamodb.setStatus('False', session)
-            dynamodb.setTooManyPeople('False')
+            if (time()-lastActivityTime) > IDLE_SECONDS:
+                img = initialize(imageCounter)
+                imageCounter += 1
+                session = None
+                dynamodb.setStatus('False', session)
+                dynamodb.setTooManyPeople('False')
 
 
         if(peoplecount > 1):
@@ -196,6 +199,7 @@ if __name__ == '__main__':
         if(peoplecount==1):
             if (session == None):
                 session = getNewSession()
+            lastActivityTime = time()
             item = '{"statuskey":"personpresent", "statusvalue": { "presence": "True", "sessionID": "'+session+'" }}'
             dynamodb.setStatusek(json.loads(item))
             dynamodb.setTooManyPeople('False')
