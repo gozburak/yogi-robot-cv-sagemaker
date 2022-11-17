@@ -89,12 +89,12 @@ class PostureAnalysis():
                 iter_body.update({bodypart_name: body})
             allBodyparts.append(iter_body)
         return allBodyparts
-
+    
     # This calculates deviations from the ground truth
     def calculate_deviations(self, pose, facing_direction, paramsBodyparts):
         deviations = []
         booleon = []
-        confidence_threshold = 0.35
+        confidence_threshold = 0.30
         
         # Facing direction affects the ground truth
         if facing_direction == "Left Facing":
@@ -139,6 +139,20 @@ class PostureAnalysis():
             else:
                 side = "Probably Front"
         return side
+    
+    # Analysis of difference
+    def analyze_result(self,booleon):
+        # The below confidence
+        minimum_conf_body_parts = 4
+        
+        if len(booleon) < minimum_conf_body_parts:
+            final_boolean = False
+            print("Less than 4 body parts visibile with high confidence!")
+        else:
+            final_boolean = all(booleon.values())
+        return final_boolean
+    
+    
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
     
     # ... 'create_json' replaces the original 'update_state_json' function
@@ -182,6 +196,9 @@ class PostureAnalysis():
                 "Deviations": Devi}
                for person, (Bbox, Joint, Body, Devi) in
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
-
-        return all(booleon[0].values()), booleon, json.dumps(res)
-
+        
+        
+        # The below confidence
+        final_boolean = self.analyze_result(booleon[0])
+        
+        return final_boolean, booleon, json.dumps(res)
