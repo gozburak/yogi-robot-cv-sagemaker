@@ -169,7 +169,7 @@ if __name__ == '__main__':
     IDLE_SECONDS=3
     while(True): #Main loop
         currentposture = dynamodb.getPosture()
-        frame = get_Image(cap, False)
+        frame = get_Image(cap, True)
         img = mx.nd.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).astype('uint8')
         x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
         x = x.as_in_context(ctx)
