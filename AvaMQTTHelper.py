@@ -19,17 +19,23 @@ class AvaMQTTHelper:
         self.ENDPOINT = settings.ENDPOINT
         self.PATH_TO_PRIVATE_KEY = settings.KEY
         self.PATH_TO_CERTIFICATE = settings.CERT
+        self.PATH_TO_ROOT_CERTIFICATE = settings.ROOTCERT
         self.TOPIC = settings.TOPIC
         self.CLIENT_ID = settings.CLIENT_ID
-        self.PATH_TO_AMAZON_ROOT_CA_1 = "./root-CA.crt"
+        #self.PATH_TO_AMAZON_ROOT_CA_1 = "./root-CA.crt"
         self.mqtt_connection = None
         self.resetMQTTConnection()
         self.counter = 0
 
     def resetMQTTConnection(self):
-        if (self.mqtt_connection != None):
-            disconnect_future = self.mqtt_connection.disconnect()
-            disconnect_future.result()
+        try:
+            if (self.mqtt_connection != None):
+                disconnect_future = self.mqtt_connection.disconnect()
+                disconnect_future.result()
+        except:
+            #ignore exception - this means that the connection was
+            #already interrupted
+            exception = "ignore this"
         event_loop_group = io.EventLoopGroup(1)
         host_resolver = io.DefaultHostResolver(event_loop_group)
         client_bootstrap = io.ClientBootstrap(event_loop_group, host_resolver)
@@ -38,22 +44,23 @@ class AvaMQTTHelper:
                     cert_filepath=self.PATH_TO_CERTIFICATE,
                     pri_key_filepath=self.PATH_TO_PRIVATE_KEY,
                     client_bootstrap=client_bootstrap,
-                    ca_filepath=self.PATH_TO_AMAZON_ROOT_CA_1,
+                    #ca_filepath=self.PATH_TO_AMAZON_ROOT_CA_1,
+                    ca_filepath=self.PATH_TO_ROOT_CERTIFICATE,
                     client_id=self.CLIENT_ID,
                     clean_session=False,
                     keep_alive_secs=6
                     )
-        #print("Connecting to {} with client ID '{}'...".format(self.NDPOINT, self.CLIENT_ID))
-        # Make the connect() call
+         # Make the connect() call
         connect_future = self.mqtt_connection.connect()
         # Future.result() waits until a result is available
         connect_future.result()
         print("Connected!")
 
     def publishMessage(self, message):
-        self.counter +=1
-        if self.counter > 500:
+        try:
+            self.mqtt_connection.publish(topic=self.TOPIC, payload=message, qos=mqtt.QoS.AT_LEAST_ONCE)
+            print("Published: '" + json.dumps(message) + "' to the topic: " + self.TOPIC)
+        except:
             self.resetMQTTConnection()
-        print('Begin Publish')
-        self.mqtt_connection.publish(topic=self.TOPIC, payload=message, qos=mqtt.QoS.AT_LEAST_ONCE)
-        print("Published: '" + json.dumps(message) + "' to the topic: " + self.TOPIC)
+            self.mqtt_connection.publish(topic=self.TOPIC, payload=message, qos=mqtt.QoS.AT_LEAST_ONCE)
+
