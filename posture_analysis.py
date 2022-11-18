@@ -1,6 +1,7 @@
 import datetime
 import json
 import math
+import numpy as np
 
 
 # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase
@@ -33,8 +34,11 @@ class PostureAnalysis():
                    'Left Shoulder', 'Right Elbow', 'Left Elbow', 'Right Wrist', 'Left Wrist', 'Right Hip',
                    'Left Hip', 'Right Knee', 'Left Knee', 'Right Ankle', 'Left Ankle']
     
-    Parts_needed = ["Thigh", "Lower Arm", "Upper Arm"]
-    
+    Parts_needed = ['Lower Arm', 'Upper Arm', 'Thigh']
+    Thresholds = {'Kink': 25,
+                  'MinConf': 0.55,
+                  'Diff': 0.15}
+ 
 
     BodyForm = {
         'Right Lower Arm': ['Right Shoulder', 'Right Elbow'],
@@ -51,12 +55,12 @@ class PostureAnalysis():
 
     # WE NEED TO REPLACE THSI WITH A DATABASE
     ground_truth_angles = {'chair': {
-        'Right Lower Arm': {'GT Angle': -50.0, 'Threshold': 15},
-        'Left Lower Arm': {'GT Angle': -50.0, 'Threshold': 15},
-        'Right Upper Arm': {'GT Angle': -60.0, 'Threshold': 20},
-        'Left Upper Arm': {'GT Angle': -60.0, 'Threshold': 20},
-        'Right Thigh': {'GT Angle': 35.0, 'Threshold': 15},
-        'Left Thigh': {'GT Angle': 35.0, 'Threshold': 15},
+        'Right Lower Arm': {'GT Angle': -50.0, 'Threshold': 10},
+        'Left Lower Arm': {'GT Angle': -50.0, 'Threshold': 10},
+        'Right Upper Arm': {'GT Angle': -60.0, 'Threshold': 15},
+        'Left Upper Arm': {'GT Angle': -60.0, 'Threshold': 15},
+        'Right Thigh': {'GT Angle': 40.0, 'Threshold': 10},
+        'Left Thigh': {'GT Angle': 40.0, 'Threshold': 10},
         'Left Leg': {'GT Angle': -65.0, 'Threshold': 35},
         'Right Leg': {'GT Angle': -65.0, 'Threshold': 35}}}
 
@@ -98,7 +102,8 @@ class PostureAnalysis():
     def calculate_deviations(self, pose, facing_direction, paramsBodyparts):
         deviations = []
         booleon = []
-        confidence_threshold = 0.30
+        excess_deviations = []
+        confidence_threshold = self.Thresholds['MinConf']
         
         # Facing direction affects the ground truth
         if facing_direction == "Left Facing":
@@ -112,22 +117,27 @@ class PostureAnalysis():
         for paramsBodyparts_pp in paramsBodyparts:
             deviations_pp = {}
             booleon_pp = {}
+            devi_excess_pp = {}
             for bodypart_name, GT_data in self.ground_truth_angles[pose].items():
                 if paramsBodyparts_pp[bodypart_name]['Conf'] >= confidence_threshold:
                     diff = adopter*paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
+                    devi_excess = abs(diff) - GT_data['Threshold']
                     deviations_pp.update({bodypart_name: {'Diff': diff}})
-                    if abs(diff) <= GT_data['Threshold']:
+                    if devi_excess < 0:
                         booleon_pp.update({bodypart_name: True})
                     else:
                         booleon_pp.update({bodypart_name: False})
+                        directional_deviation = np.sign(diff)*devi_excess
+                        devi_excess_pp.update({bodypart_name: directional_deviation})
             booleon.append(booleon_pp)
             deviations.append(deviations_pp)
-        return deviations, booleon
+            excess_deviations.append(devi_excess_pp)
+        return deviations, excess_deviations, booleon
 
     
     #get direction of the face - orientation
     def get_facing_direction(self, allJoints):
-        diff_conf_threshold = 0.1
+        diff_conf_threshold = self.Thresholds['Diff']
         for allJoints_pp in allJoints:
             right_joint_list = [allJoints_pp["Right Elbow"]['Conf'],allJoints_pp["Right Wrist"]['Conf'],
               allJoints_pp["Right Knee"]['Conf'], allJoints_pp["Right Ankle"]['Conf'],  allJoints_pp["Right Ear"]['Conf']]
@@ -136,6 +146,7 @@ class PostureAnalysis():
             avg_right_joint_conf = sum(right_joint_list)/len(right_joint_list)
             avg_left_joint_conf = sum(left_joint_list)/len(left_joint_list)
             difference = avg_right_joint_conf - avg_left_joint_conf
+
             if difference > diff_conf_threshold:
                 side = "Left Facing"
             elif difference < -diff_conf_threshold:
@@ -150,7 +161,7 @@ class PostureAnalysis():
         all_check = []
         for Bodypart_required in self.Parts_needed:
             check = False
-            for Bodypart_detected, value in booleon.items():
+            for Bodypart_detected, value in booleon[0].items():
                 if Bodypart_required in Bodypart_detected:
                     check = value
                     break
@@ -158,8 +169,48 @@ class PostureAnalysis():
         
         return all(all_check)
     
-    
+    # Get directions
+    def get_direction(self,excess_deviations):
+        kink_threshold = self.Thresholds['Kink']
+        directions_dict = {}
+        for bodypart, excess in excess_deviations[0].items():
+            direction = None
+            if 'Arm' in bodypart and excess < 0:
+                direction = 'Arms Down'
+            elif 'Arm' in bodypart and excess > 0:
+                direction = 'Arms Up'
+            elif 'Thigh' in bodypart and excess < 0:
+                direction = 'Sit Up'
+            elif 'Thigh' in bodypart and excess > 0:
+                direction = 'Sit Down'
+            if direction:
+                directions_dict.update({direction:abs(excess)})
+            
+        
+        try:
+            left_arm_kink = abs(excess_deviations[0]['Left Upper Arm'] - excess_deviations[0]['Left Lower Arm'])
+        except:
+            left_arm_kink = None
+        try:
+            right_arm_kink = abs(excess_deviations[0]['Right Upper Arm'] - excess_deviations[0]['Right Lower Arm'])
+        except:
+            right_arm_kink = None
+
+        if (left_arm_kink and left_arm_kink > kink_threshold) or (right_arm_kink and right_arm_kink > kink_threshold):
+            direction = 'Arms Straight'
+            directions_dict.update({direction:sum(filter(None, [left_arm_kink,right_arm_kink]))})
+        return directions_dict
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
+    
+    def get_critical_direction(self, directions):
+        max_direction_angle = 0
+        critical_direction = ''
+        for direction, angle in directions.items():
+            if abs(angle) > max_direction_angle:
+                max_direction_angle = abs(angle)
+                critical_direction = direction
+        return critical_direction
+    
     
     # ... 'create_json' replaces the original 'update_state_json' function
     def create_json(self, pred_coords, confidence, bboxes, scores, session, pose):
@@ -169,11 +220,9 @@ class PostureAnalysis():
         confidence_clean = confidence.asnumpy()
         bounding_boxs_clean = bboxes.asnumpy()
         scores_clean = scores.asnumpy()
-        print("before allJoints")
         # The following identifies the joints and body part dictionaries for the picture
         allJoints = [{name: Joint(name, coord[0], coord[1], conf[0]) for name, coord, conf in
                       zip(self.keys_Joints, coord_per_person, conf_per_person)} for coord_per_person, conf_per_person in zip(pred_coords_clean, confidence_clean)]
-        print("after allJoints")
         allBodyParts = self.build_body_from_joints(allJoints)
 
         # We also transfer the bounding box
@@ -194,17 +243,21 @@ class PostureAnalysis():
         time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Calculating deviations
-        deviations, booleon = self.calculate_deviations(pose, facing_direction, paramsBodyparts)
-
+        deviations, excess_deviations, booleon = self.calculate_deviations(pose, facing_direction, paramsBodyparts)
+        
+        # get all directions
+        directions = self.get_direction(excess_deviations)
+        
+        #Pick the critical direction
+        critical_direction = self.get_critical_direction(directions)
+        
         # This is the schema for our JSON
         res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
                 "Bodyparts": Body,
-                "Deviations": Devi}
+                "Deviations": Devi, 'Direction':critical_direction}
                for person, (Bbox, Joint, Body, Devi) in
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
         
-        
-        # The below confidence
-        final_boolean = self.analyze_result(booleon[0])
+        final_boolean = self.analyze_result(booleon)
         
         return final_boolean, booleon, json.dumps(res)
