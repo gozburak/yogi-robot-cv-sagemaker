@@ -165,7 +165,7 @@ if __name__ == '__main__':
     session = None
     cap = cv2.VideoCapture(0)
 
-    IDLE_SECONDS=3
+    IDLE_SECONDS=4
     while(True): #Main loop
         currentposture = dynamodb.getPosture()
         frame = get_Image(cap, False)
@@ -183,12 +183,15 @@ if __name__ == '__main__':
         #count number of people
         peoplecount = count_people(class_IDs,scores,bounding_boxs)
         if (peoplecount ==0):
+            print(time()-lastActivityTime)
             if (time()-lastActivityTime) > IDLE_SECONDS:
                 img = initialize(imageCounter)
                 imageCounter += 1
                 session = None
                 dynamodb.setStatus('False', session)
                 dynamodb.setTooManyPeople('False')
+            else:
+                print("Waiting for Idle")
 
 
         if(peoplecount > 1):
@@ -214,7 +217,7 @@ if __name__ == '__main__':
                 poseCorrect, booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,
                                                           session,currentposture)
                 cloud_output = '{"out":' + result_json + '}'
-                print(cloud_output)
+                #print(cloud_output)
                 sendMessage(cloud_output)
                 if poseCorrect:
                     addFeedback(img, True)
