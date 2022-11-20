@@ -99,7 +99,7 @@ def addFeedback(img, correct=True):
         fontColor = (255, 255, 255)
         text = "Great Job !!!"
     font = cv2.FONT_HERSHEY_SIMPLEX
-    bottomLeftCornerOfText = (15, 100)
+    bottomLeftCornerOfText = (15, 50)
     fontScale = 2
     thickness = 3
     lineType = 2
@@ -113,11 +113,10 @@ def addFeedback(img, correct=True):
     return img
 
 def tooManyPeople(img):
-    # Using cv2.imread() method
-    fontColor=(0,255,255)
+    fontColor=(0,255,0)
     text="Too many people"
     font = cv2.FONT_HERSHEY_SIMPLEX
-    bottomLeftCornerOfText = (15, 100)
+    bottomLeftCornerOfText = (50, 50)
     fontScale = 2
     thickness = 3
     lineType = 2
