@@ -131,7 +131,7 @@ def tooManyPeople(img):
     return img
 imageCounter = 0
 def initialize(imageIndex):
-    ImageArray = ["./images/yoga1.jpg", "./images/yoga2.jpg"]
+    ImageArray = ["./images/yoga1.jpg", "./images/yoga2.jpg", "./images/yoga3.jpg"]
     count = len(ImageArray)
     index = imageIndex%count
     img = cv2.imread(ImageArray[index])
@@ -169,7 +169,7 @@ if __name__ == '__main__':
     IDLE_SECONDS=3
     while(True): #Main loop
         currentposture = dynamodb.getPosture()
-        frame = get_Image(cap, True)
+        frame = get_Image(cap, False)
         img = mx.nd.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).astype('uint8')
         x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
         x = x.as_in_context(ctx)
