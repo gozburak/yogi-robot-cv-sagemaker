@@ -36,7 +36,7 @@ class PostureAnalysis():
     
     Parts_needed = ['Lower Arm', 'Upper Arm', 'Thigh']
     Thresholds = {'Kink': 25,
-                  'MinConf': 0.55,
+                  'MinConf': 0.35,
                   'Diff': 0.15}
  
 
