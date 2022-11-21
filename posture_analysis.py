@@ -265,14 +265,14 @@ class PostureAnalysis():
 
 
         # DEBUGGING!!!!
-        del res[0]['SessionID']
-        del res[0]['PersonID']
-        del res[0]['BoundingBox']
-        del res[0]['Joints']
-        res[0].update({"Facing":facing_direction})
+        #del res[0]['SessionID']
+        #del res[0]['PersonID']
+        #del res[0]['BoundingBox']
+        #del res[0]['Joints']
+        #res[0].update({"Facing":facing_direction})
 
         final_boolean = self.analyze_result(booleon)
-        if final_boolean:
-            print('YOU MADE IT BELOW!')
+        #if final_boolean:
+            #print('YOU MADE IT BELOW!')
 
         return final_boolean, booleon, json.dumps(res)
