@@ -191,7 +191,7 @@ if __name__ == '__main__':
     session = None
     cap = cv2.VideoCapture(0)
 
-    IDLE_SECONDS=4
+    IDLE_SECONDS=5
     while(True): #Main loop
         currentposture = dynamodb.getPosture()
         frame = get_Image(cap, False)
