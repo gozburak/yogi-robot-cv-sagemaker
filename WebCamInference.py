@@ -14,6 +14,7 @@ from gluoncv import data
 from gluoncv.data import mscoco
 from gluoncv.model_zoo import get_model, model_zoo
 from gluoncv.data.transforms.pose import detector_to_simple_pose, heatmap_to_coord
+from gluoncv.data.transforms.pose import detector_to_alpha_pose, heatmap_to_coord_alpha_pose
 from gluoncv.utils.viz import cv_plot_image, cv_plot_keypoints
 from dynamodb import Dynamodb
 from awscrt import mqtt
@@ -38,6 +39,14 @@ REGION_NAME = os.getenv('REGION_NAME')
 received_count = 0
 received_all_event = threading.Event()
 #is_ci = cmdUtils.get_command("is_ci", None) != None
+
+print("Supported Models: alpha_pose_resnet101_v1b_coco, simple_pose_resnet18_v1b")
+
+print("Your selected object detector: ", DETECTOR)
+print("Your selected pose detector: ", POSEMODEL)
+
+POSEMODEL_settings = {'alpha_pose_resnet101_v1b_coco':{'Short':512},
+                     'simple_pose_resnet18_v1b':{'Short':256}}
 
 # Callback when connection is accidentally lost.
 def on_connection_interrupted(connection, error, **kwargs):
@@ -128,6 +137,7 @@ def tooManyPeople(img):
                 thickness,
                 lineType)
     return img
+
 imageCounter = 0
 def initialize(imageIndex):
     ImageArray = ["./images/yoga1.jpg", "./images/yoga2.jpg", "./images/yoga3.jpg"]
@@ -155,7 +165,7 @@ if __name__ == '__main__':
     imageIndex =0
     #detector_name = "ssd_512_mobilenet1.0_coco"
     detector = get_model(DETECTOR, pretrained=True, ctx=ctx)
-    detector.reset_class(classes=['person'], reuse_weights={'person': 'person'})
+    detector.reset_class(classes=['person'], reuse_weights=['person'])
     
     #chair detector
     chair_detector = model_zoo.get_model('yolo3_mobilenet1.0_coco', pretrained=True)
@@ -170,7 +180,8 @@ if __name__ == '__main__':
         currentposture = dynamodb.getPosture()
         frame = get_Image(cap, False)
         img = mx.nd.array(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).astype('uint8')
-        x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=480, max_size=1024)
+        short = POSEMODEL_settings[POSEMODEL]['Short']
+        x, scaled_img = gcv.data.transforms.presets.yolo.transform_test(img, short=short)
         x = x.as_in_context(ctx)
         class_IDs, scores, bounding_boxs = detector(x)
 
@@ -205,13 +216,24 @@ if __name__ == '__main__':
             item = '{"statuskey":"personpresent", "statusvalue": { "presence": "True", "sessionID": "'+session+'" }}'
             dynamodb.setStatusek(json.loads(item))
             dynamodb.setTooManyPeople('False')
-            pose_input, upscale_bbox = detector_to_simple_pose(scaled_img, class_IDs, scores, bounding_boxs,
-                                                               output_shape=(128, 96), ctx=ctx)
+
+            if POSEMODEL is 'alpha_pose_resnet101_v1b_coco':
+                # output_shape=(128, 96)
+                pose_input, upscale_bbox = detector_to_alpha_pose(scaled_img, class_IDs, scores, bounding_boxs,
+                                                                  ctx=ctx)
+            if POSEMODEL is 'simple_pose_resnet18_v1b':
+                pose_input, upscale_bbox = detector_to_simple_pose(scaled_img, class_IDs, scores, bounding_boxs,
+                                                                    ctx=ctx)
+
             if len(upscale_bbox) > 0:
                 predicted_heatmap = net(pose_input)
-                pred_coords, confidence = heatmap_to_coord(predicted_heatmap, upscale_bbox)
+                if POSEMODEL is 'alpha_pose_resnet101_v1b_coco':
+                    pred_coords, confidence = heatmap_to_coord_alpha_pose(predicted_heatmap, upscale_bbox)
+                if POSEMODEL is 'simple_pose_resnet18_v1b':
+                    pred_coords, confidence = heatmap_to_coord(predicted_heatmap, upscale_bbox)
 
                 scale = 1.0 * img.shape[0] / scaled_img.shape[0]
+                # scale = 1.0
                 img = cv_plot_keypoints(img.asnumpy(), pred_coords, confidence, class_IDs, bounding_boxs, scores,
                                         box_thresh=1, keypoint_thresh=0.3, scale=scale)
                 poseCorrect, booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,

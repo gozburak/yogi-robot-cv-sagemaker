@@ -36,33 +36,29 @@ class PostureAnalysis():
     
     Parts_needed = ['Lower Arm', 'Upper Arm', 'Thigh']
     Thresholds = {'Kink': 25,
-                  'MinConf': 0.55,
+                  'Facing Conf': 0.45,
+                  'NonFacing Conf': 0.7,
                   'Diff': 0.15}
  
-
+    # NOTICE: THE SIDES OF BELOW BODY PARTS ARE NOW DEFINED FOR THE ATTENDEE SIDE (not viewer side!!!)
     BodyForm = {
-        'Right Lower Arm': ['Right Shoulder', 'Right Elbow'],
-        'Left Lower Arm': ['Left Shoulder', 'Left Elbow'],
-        'Right Upper Arm': ['Right Elbow', 'Right Wrist'],
-        'Left Upper Arm': ['Left Elbow', 'Left Wrist'],
-        'Right Thigh': ['Right Hip', 'Right Knee'],
-        'Left Thigh': ['Left Hip', 'Left Knee'],
-        'Right Leg': ['Right Knee', 'Right Ankle'],
-        'Left Leg': ['Left Knee', 'Left Ankle'],
-        'Hips': ['Left Hip', 'Right Hip'],
-        'Shoulders': ['Left Shoulder', 'Right Shoulder'],
+        'Right Lower Arm': ['Left Shoulder', 'Left Elbow'],
+        'Left Lower Arm': ['Right Shoulder', 'Right Elbow'],
+        'Right Upper Arm': ['Left Elbow', 'Left Wrist'],
+        'Left Upper Arm': ['Right Elbow', 'Right Wrist'],
+        'Right Thigh': ['Left Hip', 'Left Knee'],
+        'Left Thigh': ['Right Hip', 'Right Knee'],
+        'Hips': ['Left Hip', 'Right Hip']
     }
 
-    # WE NEED TO REPLACE THSI WITH A DATABASE
     ground_truth_angles = {'chair': {
-        'Right Lower Arm': {'GT Angle': -50.0, 'Threshold': 10},
-        'Left Lower Arm': {'GT Angle': -50.0, 'Threshold': 10},
-        'Right Upper Arm': {'GT Angle': -60.0, 'Threshold': 15},
-        'Left Upper Arm': {'GT Angle': -60.0, 'Threshold': 15},
-        'Right Thigh': {'GT Angle': 40.0, 'Threshold': 10},
-        'Left Thigh': {'GT Angle': 40.0, 'Threshold': 10},
-        'Left Leg': {'GT Angle': -65.0, 'Threshold': 35},
-        'Right Leg': {'GT Angle': -65.0, 'Threshold': 35}}}
+        'Left Facing': {
+        'Left Lower Arm': {'GT Angle': 45.0, 'Threshold': 20},
+        'Right Lower Arm': {'GT Angle': 45.0, 'Threshold': 10},
+        'Left Upper Arm': {'GT Angle': 55.0, 'Threshold': 30},
+        'Right Upper Arm': {'GT Angle': 55.0, 'Threshold': 15},
+        'Left Thigh': {'GT Angle': 60.0, 'Threshold': 30},
+        'Right Thigh': {'GT Angle': 60.0, 'Threshold': 15}}}}
 
     # This build the joints object
     def get_joints_params(self, allJoints):
@@ -82,7 +78,7 @@ class PostureAnalysis():
             paramsBodyparts_pp = {}
             for bodypart_name in PostureAnalysis.BodyForm:
                 body = allBodyparts_pp[bodypart_name]
-                paramsBodyparts_pp.update({bodypart_name: {"Angle": body.orient, "Conf": body.conf}})
+                paramsBodyparts_pp.update({bodypart_name: {"Angle": abs(body.orient), "Conf": body.conf}})
             paramsBodyparts.append(paramsBodyparts_pp)
         return paramsBodyparts
 
@@ -98,19 +94,16 @@ class PostureAnalysis():
             allBodyparts.append(iter_body)
         return allBodyparts
     
+
+
     # This calculates deviations from the ground truth
     def calculate_deviations(self, pose, facing_direction, paramsBodyparts):
         deviations = []
         booleon = []
         excess_deviations = []
-        confidence_threshold = self.Thresholds['MinConf']
-        
-        # Facing direction affects the ground truth
-        if facing_direction == "Left Facing":
-            adopter = -1
-        else:
-            adopter = 1
-            
+
+        facing_side = facing_direction.split()[0]
+
         # exception ahndling, our default pose is chair pose
         if pose == '':
             pose = 'chair'
@@ -118,17 +111,22 @@ class PostureAnalysis():
             deviations_pp = {}
             booleon_pp = {}
             devi_excess_pp = {}
-            for bodypart_name, GT_data in self.ground_truth_angles[pose].items():
+            for bodypart_name, GT_data in self.ground_truth_angles[pose][facing_direction].items():
+                if facing_side in bodypart_name:
+                    confidence_threshold = self.Thresholds['NonFacing Conf']
+                else:
+                    confidence_threshold = self.Thresholds['Facing Conf']
                 if paramsBodyparts_pp[bodypart_name]['Conf'] >= confidence_threshold:
-                    diff = adopter*paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
+                    diff = paramsBodyparts_pp[bodypart_name]['Angle'] - GT_data['GT Angle']
                     devi_excess = abs(diff) - GT_data['Threshold']
                     deviations_pp.update({bodypart_name: {'Diff': diff}})
-                    if devi_excess < 0:
+                    if devi_excess <= 0:
                         booleon_pp.update({bodypart_name: True})
                     else:
                         booleon_pp.update({bodypart_name: False})
                         directional_deviation = np.sign(diff)*devi_excess
                         devi_excess_pp.update({bodypart_name: directional_deviation})
+                    # print(f"Partname: {bodypart_name}, Conf Thres: {confidence_threshold}, Angle: {paramsBodyparts_pp[bodypart_name]['Angle']}, Diff: {diff} ")
             booleon.append(booleon_pp)
             deviations.append(deviations_pp)
             excess_deviations.append(devi_excess_pp)
@@ -166,7 +164,6 @@ class PostureAnalysis():
                     check = value
                     break
             all_check.append(check)
-        
         return all(all_check)
     
     # Get directions
@@ -176,9 +173,9 @@ class PostureAnalysis():
         for bodypart, excess in excess_deviations[0].items():
             direction = None
             if 'Arm' in bodypart and excess < 0:
-                direction = 'Arms Down'
-            elif 'Arm' in bodypart and excess > 0:
                 direction = 'Arms Up'
+            elif 'Arm' in bodypart and excess > 0:
+                direction = 'Arms Down'
             elif 'Thigh' in bodypart and excess < 0:
                 direction = 'Sit Up'
             elif 'Thigh' in bodypart and excess > 0:
@@ -202,14 +199,20 @@ class PostureAnalysis():
         return directions_dict
     # These are the classes used to calculate angles, locations and other metrics specific to yoga usecase.
     
-    def get_critical_direction(self, directions):
-        max_direction_angle = 0
-        critical_direction = ''
+    def get_critical_directions(self, directions):
+        max_upper_angle = 0
+        upper_direction = ''
+        max_lower_angle = 0
+        lower_direction = ''
         for direction, angle in directions.items():
-            if abs(angle) > max_direction_angle:
-                max_direction_angle = abs(angle)
-                critical_direction = direction
-        return critical_direction
+            if (abs(angle) > max_upper_angle) and ('Arms' in direction):
+                max_upper_angle = abs(angle)
+                upper_direction = direction
+            elif (abs(angle) > max_lower_angle) and ('Sit' in direction):
+                max_lower_angle = abs(angle)
+                lower_direction = direction
+        critical_directions = {'TopBody': upper_direction, 'Low Body': lower_direction}
+        return critical_directions
     
     
     # ... 'create_json' replaces the original 'update_state_json' function
@@ -237,27 +240,39 @@ class PostureAnalysis():
         paramsBodyparts = self.get_bodyparts_params(allBodyParts)
 
         #Let determine side
-        facing_direction = self.get_facing_direction(paramsJoints)
-
+        #facing_direction = self.get_facing_direction(paramsJoints)
+        facing_direction = "Left Facing" #CHEATING
         # Time stamp is added to the output
         time_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Calculating deviations
         deviations, excess_deviations, booleon = self.calculate_deviations(pose, facing_direction, paramsBodyparts)
-        
+
+        # print(excess_deviations)
         # get all directions
         directions = self.get_direction(excess_deviations)
-        
+        # print(directions)
+
         #Pick the critical direction
-        critical_direction = self.get_critical_direction(directions)
+        critical_directions = self.get_critical_directions(directions)
         
         # This is the schema for our JSON
         res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
                 "Bodyparts": Body,
-                "Deviations": Devi, 'Direction':critical_direction}
+                "Deviations": Devi, 'Direction':critical_directions}
                for person, (Bbox, Joint, Body, Devi) in
                enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
-        
+
+
+        # DEBUGGING!!!!
+        del res[0]['SessionID']
+        del res[0]['PersonID']
+        del res[0]['BoundingBox']
+        del res[0]['Joints']
+        res[0].update({"Facing":facing_direction})
+
         final_boolean = self.analyze_result(booleon)
-        
+        if final_boolean:
+            print('YOU MADE IT BELOW!')
+
         return final_boolean, booleon, json.dumps(res)
