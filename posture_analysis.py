@@ -211,7 +211,13 @@ class PostureAnalysis():
             elif (abs(angle) > max_lower_angle) and ('Sit' in direction):
                 max_lower_angle = abs(angle)
                 lower_direction = direction
-        critical_directions = {'TopBody': upper_direction, 'Low Body': lower_direction}
+
+        if max_upper_angle > max_lower_angle:
+            body_direction = upper_direction
+        else:
+            body_direction = lower_direction
+
+        critical_directions = {'CompleteBody':body_direction, 'TopBody': upper_direction, 'LowBody': lower_direction}
         return critical_directions
     
     
