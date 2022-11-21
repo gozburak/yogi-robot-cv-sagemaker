@@ -59,7 +59,7 @@ class AvaMQTTHelper:
     def publishMessage(self, message):
         try:
             self.mqtt_connection.publish(topic=self.TOPIC, payload=message, qos=mqtt.QoS.AT_LEAST_ONCE)
-            print("Published: '" + json.dumps(message) + "' to the topic: " + self.TOPIC)
+            #print("Published: '" + json.dumps(message) + "' to the topic: " + self.TOPIC)
         except:
             self.resetMQTTConnection()
             self.mqtt_connection.publish(topic=self.TOPIC, payload=message, qos=mqtt.QoS.AT_LEAST_ONCE)
