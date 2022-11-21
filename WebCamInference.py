@@ -3,6 +3,7 @@ import argparse, time, logging, os, math, tqdm, cv2
 from time import time
 import uuid
 import boto3
+from botocore.exceptions import ClientError
 import numpy as np
 import mxnet as mx
 from mxnet import gluon, nd, image
@@ -61,12 +62,27 @@ avaMQTTHelper = AvaMQTTHelper()
 session = None  # Session id is null because no person is present unless camera detects person.
 postureAnalysis = PostureAnalysis()
 
-# This is the original lambda handler func. - not touched
-def lambda_handler(event, context):
-    """Empty entry point to the Lambda function invoked from the edge."""
-    print("hello world")
-    return
+def get_secret():
 
+    secret_name = "avacreds"
+    region_name = "us-east-1"
+
+    # Create a Secrets Manager client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        raise e
+    credString= get_secret_value_response['SecretString']
+    credDict = json.loads(credString)
+    return credDict['SECRET'],credDict['ACCESSKEY'], credDict['REGION_NAME']
 
 def getNewSession():
     return str(uuid.uuid4())
@@ -183,15 +199,12 @@ if __name__ == '__main__':
         #count number of people
         peoplecount = count_people(class_IDs,scores,bounding_boxs)
         if (peoplecount ==0):
-            print(time()-lastActivityTime)
             if (time()-lastActivityTime) > IDLE_SECONDS:
                 img = initialize(imageCounter)
                 imageCounter += 1
                 session = None
                 dynamodb.setStatus('False', session)
                 dynamodb.setTooManyPeople('False')
-            else:
-                print("Waiting for Idle")
 
 
         if(peoplecount > 1):
