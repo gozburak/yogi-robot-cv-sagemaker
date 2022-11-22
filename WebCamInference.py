@@ -1,6 +1,6 @@
 from __future__ import division
 import argparse, time, logging, os, math, tqdm, cv2
-from time import time
+import time
 import uuid
 import boto3
 from botocore.exceptions import ClientError
@@ -173,12 +173,14 @@ def get_Image(cap,testImage= False):
 
 
 if __name__ == '__main__':
-    lastActivityTime = time()-10
+    lastActivityTime = time.time()-10
     img = initialize(imageCounter)
     imageCounter+=1
     cv_plot_image(img)
     ctx = mx.cpu()
     imageIndex =0
+    poseCorrect=False
+
     #detector_name = "ssd_512_mobilenet1.0_coco"
     detector = get_model(DETECTOR, pretrained=True, ctx=ctx)
     detector.reset_class(classes=['person'], reuse_weights=['person'])
@@ -210,7 +212,7 @@ if __name__ == '__main__':
         #count number of people
         peoplecount = count_people(class_IDs,scores,bounding_boxs)
         if (peoplecount ==0):
-            if (time()-lastActivityTime) > IDLE_SECONDS:
+            if (time.time()-lastActivityTime) > IDLE_SECONDS:
                 img = initialize(imageCounter)
                 imageCounter += 1
                 session = None
@@ -225,7 +227,7 @@ if __name__ == '__main__':
         if(peoplecount==1):
             if (session == None):
                 session = getNewSession()
-            lastActivityTime = time()
+            lastActivityTime = time.time()
             item = '{"statuskey":"personpresent", "statusvalue": { "presence": "True", "sessionID": "'+session+'" }}'
             dynamodb.setStatusek(json.loads(item))
             dynamodb.setTooManyPeople('False')
@@ -249,6 +251,7 @@ if __name__ == '__main__':
                 # scale = 1.0
                 img = cv_plot_keypoints(img.asnumpy(), pred_coords, confidence, class_IDs, bounding_boxs, scores,
                                         box_thresh=1, keypoint_thresh=0.3, scale=scale)
+                poseCorrect = False
                 poseCorrect, booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,
                                                           session,currentposture)
                 cloud_output = '{"out":' + result_json + '}'
@@ -259,6 +262,10 @@ if __name__ == '__main__':
                 else:
                     addFeedback(img, False)
         cv_plot_image(img)
+        if (poseCorrect):
+            time.sleep(5)
+            poseCorrect=False
+
 
         if cv2.waitKey(10) & 0xFF == ord("q"):
             break
