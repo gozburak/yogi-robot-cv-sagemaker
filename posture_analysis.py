@@ -262,6 +262,8 @@ class PostureAnalysis():
         #Pick the critical direction
         critical_directions = self.get_critical_directions(directions)
         
+        critical_directions.update({'Boolean': booleon[0]})
+        
         # This is the schema for our JSON
         res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
                 "Bodyparts": Body,
