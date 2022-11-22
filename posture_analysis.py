@@ -265,11 +265,11 @@ class PostureAnalysis():
         critical_directions.update({'Boolean': booleon[0]})
         
         # This is the schema for our JSON
-        res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, "Joints": Joint,
+        res = [{"SessionID": session, "Timestamp": time_now, "PersonID": person, **Bbox, 
                 "Bodyparts": Body,
                 "Deviations": Devi, 'Direction':critical_directions}
-               for person, (Bbox, Joint, Body, Devi) in
-               enumerate(zip(resBoundingBox, paramsJoints, paramsBodyparts, deviations))]
+               for person, (Bbox, Body, Devi) in
+               enumerate(zip(resBoundingBox, paramsBodyparts, deviations))]
 
 
         # DEBUGGING!!!!
