@@ -255,7 +255,7 @@ if __name__ == '__main__':
                 poseCorrect, booleon, result_json = postureAnalysis.create_json(pred_coords, confidence, bounding_boxs, scores,
                                                           session,currentposture)
                 cloud_output = '{"out":' + result_json + '}'
-                #print(cloud_output)
+                print(cloud_output)
                 sendMessage(cloud_output)
                 if poseCorrect:
                     addFeedback(img, True)
@@ -263,7 +263,7 @@ if __name__ == '__main__':
                     addFeedback(img, False)
         cv_plot_image(img)
         if (poseCorrect):
-            time.sleep(5)
+            #time.sleep(5)
             poseCorrect=False
 
 
