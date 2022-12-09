@@ -35,8 +35,8 @@ class PostureAnalysis():
                    'Left Hip', 'Right Knee', 'Left Knee', 'Right Ankle', 'Left Ankle']
     
     Parts_needed = ['Lower Arm', 'Upper Arm', 'Thigh']
-    Thresholds = {'Kink': 25,
-                  'Facing Conf': 0.45,
+    Thresholds = {'Kink': 45,
+                  'Facing Conf': 0.13,
                   'NonFacing Conf': 0.7,
                   'Diff': 0.15}
  
@@ -53,12 +53,12 @@ class PostureAnalysis():
 
     ground_truth_angles = {'chair': {
         'Left Facing': {
-        'Left Lower Arm': {'GT Angle': 45.0, 'Threshold': 20},
-        'Right Lower Arm': {'GT Angle': 45.0, 'Threshold': 10},
-        'Left Upper Arm': {'GT Angle': 55.0, 'Threshold': 30},
-        'Right Upper Arm': {'GT Angle': 55.0, 'Threshold': 15},
-        'Left Thigh': {'GT Angle': 60.0, 'Threshold': 30},
-        'Right Thigh': {'GT Angle': 60.0, 'Threshold': 15}}}}
+        'Left Lower Arm': {'GT Angle': 40.0, 'Threshold': 25},
+        'Right Lower Arm': {'GT Angle': 40.0, 'Threshold': 25},
+        'Left Upper Arm': {'GT Angle': 50.0, 'Threshold': 25},
+        'Right Upper Arm': {'GT Angle': 50.0, 'Threshold': 25},
+        'Left Thigh': {'GT Angle': 60.0, 'Threshold': 20},
+        'Right Thigh': {'GT Angle': 60.0, 'Threshold': 20}}}}
 
     # This build the joints object
     def get_joints_params(self, allJoints):
